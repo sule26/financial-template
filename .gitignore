@@ -1,0 +1,51 @@
+# Runtime data (personal, never commit)
+data/
+inbox/
+faturas/
+extratos/
+secrets/
+profiles/*.yaml
+!profiles/examples/
+!profiles/examples/*.yaml
+*.pdf
+*.csv
+!backend/tests/fixtures/**/*.pdf
+!backend/tests/fixtures/**/*.csv
+
+# Env / credentials
+.env
+.env.*
+credentials.json
+token.json
+
+# AI tooling (local config)
+.claude/
+.cursor/
+.continue/
+.aider*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+.venv/
+
+# Node
+node_modules/
+frontend/dist/
+playwright-report/
+test-results/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Taskfile cache
+.task/

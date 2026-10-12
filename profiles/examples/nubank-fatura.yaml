@@ -1,0 +1,39 @@
+# Example bank profile: Nubank credit card invoice (PDF).
+# Layout observed on a real invoice (2026-10). Values below are patterns only — no personal data.
+id: nubank-fatura
+name: Nubank — fatura do cartão
+kind: fatura
+format: pdf
+detect:
+  all: ["RESUMO DA FATURA ATUAL", "Nubank"]
+password: null
+
+page_noise:
+  - '^\d+ de \d+$'                                               # "2 de 3"
+  - '^FATURA \d{2} [A-Z]{3} \d{4} EMISSÃO E ENVIO'
+
+header:
+  due_date:     {regex: 'Data de vencimento: (?P<v>\d{2} [A-Z]{3} \d{4})', format: '%d %b %Y', month_names: pt}
+  closing_date: {regex: 'EMISSÃO E ENVIO (?P<v>\d{2} [A-Z]{3} \d{4})', format: '%d %b %Y', month_names: pt}
+  # Nubank splits the period total in two lines; the transactions add up to their sum.
+  total:
+    sum_of:
+      - {regex: 'Total de compras de todos os cartões, .*? R\$ (?P<v>[\d.]+,\d{2})'}
+      - {regex: 'Outros lançamentos R\$ (?P<v>[\d.]+,\d{2})', optional: true}
+  amount_due:   {regex: 'Total a pagar R\$ (?P<v>-?[\d.]+,\d{2})'}
+
+transactions:
+  section: {start: 'TRANSAÇÕES DE', end: '^Pagamentos '}         # payments block comes after purchases
+  # Card is per line ("•••• 1111"), not per section. Lines without it belong to the main card.
+  line: '^(?P<date>\d{2} [A-Z]{3}) (?:•••• (?P<card_hint>\d{4}) )?(?P<desc>.+?) (?P<sign>[−-])?R\$ (?P<amount>[\d.]+,\d{2})$'
+  date_format: '%d %b'            # no year: inferred from the closing date
+  month_names: pt
+  installment: 'Parcela (?P<n>\d{1,2})/(?P<of>\d{1,2})'
+  sign: minus_is_credit           # "−R$" (U+2212) or "-R$" = credit/discount
+  amount_format: br
+  ignore: ['^[A-Za-zÀ-ú. ]+ R\$ [\d.]+,\d{2}$']   # cardholder subtotal line ("Name R$ 927,27")
+
+classify:
+  - {match: '^Antecipada - ', tag: anticipation}
+  - {match: '^Desconto Antecipação', tag: anticipation_discount}
+  - {match: '^Pagamento em ', kind: transfer, tag: invoice_payment}

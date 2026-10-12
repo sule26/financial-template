@@ -1,0 +1,38 @@
+# Example bank profile: Banco Inter credit card invoice (PDF).
+# Layout observed on a real invoice (2026-10). Values below are patterns only — no personal data.
+id: inter-fatura
+name: Banco Inter — fatura do cartão
+kind: fatura
+format: pdf
+detect:
+  all: ["Despesas da fatura", "bancointer.com.br"]
+password: null
+
+# Lines repeated at the top of every page (holder name + card/due/amount header) are dropped
+# before any other processing.
+page_noise:
+  - '^[A-ZÀ-Ú ]{10,}$'                                   # holder name in upper case
+  - '^\d{4}\*{4}\d{4} \d{2}/\d{2}/\d{4} R\$ [\d.,]+$'   # "NNNN****NNNN dd/mm/yyyy R$ x,xx"
+  - '^Data Movimentação Beneficiário Valor$'
+  - '^Despesas da fatura$'
+
+header:
+  due_date:   {regex: 'Data de Vencimento[\s\S]*?(?P<v>\d{2}/\d{2}/\d{4})', format: '%d/%m/%Y'}
+  card_hint:  {regex: '(?P<v>\d{4})\*{4}\d{4} \d{2}/\d{2}/\d{4}'}
+  total:      {regex: 'Despesas do mês R\$ (?P<v>[\d.]+,\d{2})'}     # sum of the period's purchases
+  amount_due: {regex: 'Fatura atual R\$ (?P<v>-?[\d.]+,\d{2})'}       # may be 0,00 (paid in advance)
+
+transactions:
+  section: {start: 'Despesas da fatura', end: 'Próxima fatura'}      # "Próxima fatura" lists FUTURE installments: never import
+  card_section: '^CARTÃO \d{4}\*{4}(?P<v>\d{4})$'                    # main card, virtual card…
+  # "<date> <desc> - R$ x" (purchase) or "<date> <desc> - + R$ x" (payment/credit). The " - " is the empty Beneficiário column.
+  line: '^(?P<date>\d{2} de [a-zç]{3}\. \d{4}) (?P<desc>.+?) - (?:(?P<sign>\+) )?R\$ (?P<amount>[\d.]+,\d{2})$'
+  date_format: '%d de %b. %Y'
+  month_names: pt                 # jan, fev, mar, abr, mai, jun, jul, ago, set, out, nov, dez
+  installment: '\(Parcela (?P<n>\d{1,2}) de (?P<of>\d{1,2})\)'
+  sign: plus_is_credit            # Inter prints "+ R$" for payments/credits; no sign = purchase
+  amount_format: br
+  ignore: ['^Total CARTÃO']
+
+classify:
+  - {match: '^PAGAMENTO ON LINE', kind: transfer, tag: invoice_payment}   # payment during the month: not a purchase
