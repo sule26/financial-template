@@ -272,6 +272,7 @@ export function EntryList<T>({
   make,
   row,
   addLabel = "+ vigência",
+  emptyText = "Nenhuma vigência.",
 }: {
   label: string;
   items: T[];
@@ -283,6 +284,7 @@ export function EntryList<T>({
     index: number,
   ) => ReactNode;
   addLabel?: string;
+  emptyText?: string;
 }) {
   return (
     <Stack gap={4} role="group" aria-label={label}>
@@ -291,7 +293,7 @@ export function EntryList<T>({
       </Text>
       {items.length === 0 && (
         <Text size="xs" c="dimmed">
-          Nenhuma vigência.
+          {emptyText}
         </Text>
       )}
       {items.map((item, i) => (

@@ -116,6 +116,13 @@ Configuração), ícones `@tabler/icons-react` e um marcador que desliza até o 
 vidro (blur) com seletor de mês em pílula, "+ Lançar" (atalho N) e tema; no celular a navegação e o
 tema vão para um *drawer*. O banner de alertas mostra os avisos lado a lado em telas largas.
 
+Idioma (R14.13): `src/i18n/` — o texto fica em português no código e `t()`/`<T>` procuram a tradução em
+`en.ts` (sem tradução = português, nunca uma chave quebrada). O idioma é escolhido em Configurações,
+guardado no navegador (`expense-tracker-language`), vai para `<html lang>` e para os formatadores
+(dinheiro sempre em R$; datas `MM/DD/YYYY` e meses `Oct 2026` em inglês). Cabeçalho, navegação, títulos e
+descrições de páginas e painéis e os selos de situação passam por `t()`; textos internos de formulários
+ainda estão só em português (traduzir = acrescentar entradas em `en.ts` e envolver o texto com `t()`).
+
 Componentes compartilhados em `src/components/ui/` (todas as páginas usam):
 
 | Componente | Uso |

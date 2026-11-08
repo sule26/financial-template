@@ -68,7 +68,7 @@ def schedule(plan: InstallmentPlan) -> list[Charge]:
     return charges
 
 
-PlanStatus = Literal["pago", "quase acabando", "em andamento", "cancelado"]
+PlanStatus = Literal["pago", "terminando", "em andamento", "cancelado"]
 
 
 def status(plan: InstallmentPlan, current_month: str) -> PlanStatus:
@@ -78,9 +78,14 @@ def status(plan: InstallmentPlan, current_month: str) -> PlanStatus:
     remaining = sum(1 for c in schedule(plan) if c.month >= current_month)
     if remaining == 0:
         return "pago"
-    if remaining <= 2:
-        return "quase acabando"
+    if remaining <= 3:  # R14.19: "terminando" when 3 or fewer charges are left
+        return "terminando"
     return "em andamento"
+
+
+def remaining_count(plan: InstallmentPlan, current_month: str) -> int:
+    """Charges still to come (an anticipation counts as one), R14.19."""
+    return sum(1 for c in schedule(plan) if c.month >= current_month)
 
 
 def remaining_amount(plan: InstallmentPlan, current_month: str) -> Decimal:

@@ -4,6 +4,7 @@ import {
   useMantineColorScheme,
   type MantineColorScheme,
 } from "@mantine/core";
+import { T } from "../i18n/i18n";
 import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
@@ -13,7 +14,9 @@ function option(value: MantineColorScheme, label: string, icon: ReactNode) {
     label: (
       <Center style={{ gap: 6 }} className="et-theme__option">
         {icon}
-        <span className="et-theme__text">{label}</span>
+        <span className="et-theme__text">
+          <T>{label}</T>
+        </span>
       </Center>
     ),
   };

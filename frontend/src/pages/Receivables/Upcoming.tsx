@@ -5,10 +5,12 @@
 import {
   Button,
   Group,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Switch,
   Table,
+  Tabs,
   Text,
   VisuallyHidden,
 } from "@mantine/core";
@@ -16,12 +18,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   IconArrowBackUp,
   IconCalendarDue,
+  IconCalendarTime,
   IconCheck,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { api } from "../../api/client";
-import { useGet, useNames } from "../../api/hooks";
+import { useGet, useList, useNames } from "../../api/hooks";
 import type {
+  ForecastReceivable,
   MarkReceivedBody,
   ReceivableItem,
   Receivables,
@@ -29,8 +33,8 @@ import type {
 } from "../../api/types";
 import { ErrorMessage, QueryState } from "../../components/QueryState";
 import { MoneyText, Panel, StatusBadge } from "../../components/ui";
-import { formatMonth } from "../../hooks/month";
-import { formatDate, formatMoney } from "../../lib/format";
+import { addMonths, formatMonth, useMonth } from "../../hooks/month";
+import { formatDate, formatMoney, sumMoney } from "../../lib/format";
 import { buildQuery } from "../Summary/shared";
 
 /** By deadline (unknown dates last), then invoice month. */
@@ -298,20 +302,249 @@ function ItemsTable({
   );
 }
 
+/** R14.28: which deadlines "Próximos recebimentos" shows. */
+export type Period = "this" | "next" | "all";
+
+/** Month of the deadline (or of the invoice when there is no deadline). */
+function deadlineMonth(it: {
+  due_date: string | null;
+  invoice_month: string;
+}): string {
+  return it.due_date ? it.due_date.slice(0, 7) : it.invoice_month;
+}
+
+export function inPeriod(
+  it: {
+    due_date: string | null;
+    invoice_month: string;
+    overdue?: boolean;
+    status?: string;
+  },
+  period: Period,
+  current: string,
+): boolean {
+  if (period === "all") return true;
+  // an overdue debt still open is always shown (flagged "vencido"), whatever the period
+  if (it.overdue && it.status !== "received") return true;
+  const target = period === "this" ? current : addMonths(current, 1);
+  return deadlineMonth(it) === target;
+}
+
+/** Person filter and deadline period shared by the receivable panels (R14.28). */
+export function ReceivableFilters({
+  me,
+  who,
+  onWho,
+  period,
+  onPeriod,
+  pending = false,
+}: {
+  me: string;
+  who: string | null;
+  onWho: (who: string | null) => void;
+  period: Period;
+  onPeriod: (period: Period) => void;
+  pending?: boolean;
+}) {
+  const users = useList("users").data ?? [];
+  const { current } = useMonth();
+  // R14.28: one tab per person, whatever the kind of spending (confirmed + previsto)
+  const path = `/api/reports/receivables${buildQuery({ user_id: me, include_pending: pending })}`;
+  const report = useGet<Receivables>(["reports", "receivables", path], path);
+  const owed = (id: string) => {
+    const open = (report.data?.items ?? []).filter(
+      (i) => i.counterparty_user_id === id && i.status !== "received",
+    );
+    const fc = (report.data?.forecast?.items ?? []).filter(
+      (i) => i.counterparty_user_id === id,
+    );
+    const net = (rows: { direction: string; amount: string }[]) =>
+      sumMoney(
+        rows.map((i) =>
+          i.direction === "receive"
+            ? i.amount
+            : `-${i.amount}`.replace("--", ""),
+        ),
+      );
+    return {
+      confirmed: net(
+        open.map((i) => ({ direction: i.direction, amount: i.remaining })),
+      ),
+      forecast: net(fc),
+    };
+  };
+  const others = users.filter((u) => u.id !== me);
+  const chosen = who ? owed(who) : null;
+  return (
+    <Stack gap="sm" className="et-filters">
+      <Tabs
+        value={who ?? "all"}
+        onChange={(v) => onWho(!v || v === "all" ? null : v)}
+        keepMounted={false}
+      >
+        <Tabs.List aria-label="Pessoa" className="et-tabs-wrap">
+          <Tabs.Tab value="all">Todas</Tabs.Tab>
+          {others.map((u) => (
+            <Tabs.Tab key={u.id} value={u.id}>
+              {u.name}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </Tabs>
+      {who && chosen && (
+        <Group gap="xl" aria-label={`Resumo de ${names(users, who)}`}>
+          <div>
+            <Text size="xs" c="dimmed">
+              Confirmado em aberto (saldo: + te deve, − você deve)
+            </Text>
+            <MoneyText value={chosen.confirmed} fw={700} />
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">
+              Previsto (assinaturas, gastos recorrentes, parcelas; este mês e 2
+              próximos)
+            </Text>
+            <MoneyText value={chosen.forecast} fw={700} />
+          </div>
+        </Group>
+      )}
+      <Group gap="md" align="flex-end" wrap="wrap">
+        <Stack gap={4}>
+          <Text size="sm" fw={500} id="et-period-label">
+            Vencimento
+          </Text>
+          <SegmentedControl
+            aria-labelledby="et-period-label"
+            value={period}
+            onChange={(v) => onPeriod(v as Period)}
+            data={[
+              { value: "this", label: `Este mês (${formatMonth(current)})` },
+              {
+                value: "next",
+                label: `Próximo mês (${formatMonth(addMonths(current, 1))})`,
+              },
+              { value: "all", label: "Todos em aberto" },
+            ]}
+          />
+        </Stack>
+      </Group>
+    </Stack>
+  );
+}
+
+function names(users: { id: string; name: string }[], id: string): string {
+  return users.find((u) => u.id === id)?.name ?? id;
+}
+
+/** Per-person totals of the visible receivables; a click filters to that person (R14.28). */
+function PersonTotals({
+  items,
+  onWho,
+}: {
+  items: ReceivableItem[];
+  onWho: (who: string | null) => void;
+}) {
+  const names = useNames();
+  const people = new Map<string, { receive: string[]; pay: string[] }>();
+  for (const it of items) {
+    const p = people.get(it.counterparty_user_id) ?? { receive: [], pay: [] };
+    (it.direction === "receive" ? p.receive : p.pay).push(it.remaining);
+    people.set(it.counterparty_user_id, p);
+  }
+  if (people.size === 0) return null;
+  return (
+    <SimpleGrid
+      cols={{ base: 1, sm: 2, lg: 3 }}
+      spacing="sm"
+      aria-label="Por pessoa"
+    >
+      {[...people.entries()].map(([id, t]) => (
+        <Button
+          key={id}
+          variant="default"
+          h="auto"
+          py={8}
+          onClick={() => onWho(id)}
+          aria-label={`Ver só ${names.users[id] ?? id}`}
+          styles={{
+            inner: { justifyContent: "space-between" },
+            label: { width: "100%" },
+          }}
+        >
+          <Group justify="space-between" w="100%" wrap="nowrap">
+            <Text fw={600} size="sm">
+              {names.users[id] ?? id}
+            </Text>
+            <Stack gap={0} align="flex-end">
+              {t.receive.length > 0 && (
+                <Group gap={6} wrap="nowrap">
+                  <Text size="xs" c="dimmed">
+                    te deve
+                  </Text>
+                  <MoneyText
+                    value={sumMoney(t.receive)}
+                    tone="positive"
+                    fw={700}
+                    size="sm"
+                  />
+                </Group>
+              )}
+              {t.pay.length > 0 && (
+                <Group gap={6} wrap="nowrap">
+                  <Text size="xs" c="dimmed">
+                    você deve
+                  </Text>
+                  <MoneyText
+                    value={sumMoney(t.pay)}
+                    tone="negative"
+                    fw={700}
+                    size="sm"
+                  />
+                </Group>
+              )}
+            </Stack>
+          </Group>
+        </Button>
+      ))}
+    </SimpleGrid>
+  );
+}
+
 export function UpcomingReceivables({
   me,
   pending,
+  who = null,
+  period = "all",
+  onWho = () => {},
 }: {
   me: string;
   pending: boolean;
+  who?: string | null;
+  period?: Period;
+  onWho?: (who: string | null) => void;
 }) {
+  const { current } = useMonth();
   const path = `/api/reports/receivables${buildQuery({ user_id: me, include_pending: pending })}`;
   const report = useGet<Receivables>(["reports", "receivables", path], path);
   const [showReceived, setShowReceived] = useState(false);
   // Lines marked in this session stay visible (with "Desfazer") even when received ones are hidden.
   const [flashed, setFlashed] = useState<Set<string>>(new Set());
   const [announce, setAnnounce] = useState("");
-  const all = [...(report.data?.items ?? [])].sort(byDeadline);
+  // R14.28: only the chosen person and period, sorted by person then deadline
+  const all = [...(report.data?.items ?? [])]
+    .filter((i) => (who ? i.counterparty_user_id === who : true))
+    .filter((i) => inPeriod(i, period, current))
+    .sort(
+      (a, b) =>
+        a.counterparty_user_id.localeCompare(b.counterparty_user_id) ||
+        byDeadline(a, b),
+    );
+  const sumOf = (direction: ReceivableItem["direction"]) =>
+    sumMoney(
+      all
+        .filter((i) => i.direction === direction && i.status !== "received")
+        .map((i) => i.remaining),
+    );
   const visible = (i: ReceivableItem) =>
     showReceived || i.status !== "received" || flashed.has(itemKey(i));
   const items = all.filter(visible);
@@ -348,7 +581,11 @@ export function UpcomingReceivables({
         isLoading={report.isLoading}
         error={report.error}
         empty={all.length === 0}
-        emptyText="Nada pendente para receber ou pagar."
+        emptyText={
+          period === "all"
+            ? "Nada pendente para receber ou pagar."
+            : "Nada vence nesse período. Escolha “Todos em aberto” para ver o resto."
+        }
       >
         <Stack gap="lg">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
@@ -357,7 +594,7 @@ export function UpcomingReceivables({
                 Total a receber
               </Text>
               <MoneyText
-                value={report.data?.totals.receive}
+                value={sumOf("receive")}
                 tone="positive"
                 fw={700}
                 size="lg"
@@ -368,13 +605,14 @@ export function UpcomingReceivables({
                 Total a pagar
               </Text>
               <MoneyText
-                value={report.data?.totals.pay}
+                value={sumOf("pay")}
                 tone="negative"
                 fw={700}
                 size="lg"
               />
             </div>
           </SimpleGrid>
+          {!who && <PersonTotals items={items} onWho={onWho} />}
           <Stack gap="xs" component="section" aria-label="A receber de outros">
             <Text fw={650}>Receber</Text>
             <ItemsTable
@@ -395,6 +633,129 @@ export function UpcomingReceivables({
           </Stack>
         </Stack>
       </QueryState>
+    </Panel>
+  );
+}
+
+/**
+ * R14.15 "Previsto": what people will owe from subscriptions, recurring purchases and
+ * installments split with them, before the invoice/statement arrives. Informative only: it
+ * cannot be marked as received and is not in the totals above.
+ */
+export function ForecastReceivables({
+  me,
+  pending,
+  who = null,
+}: {
+  me: string;
+  pending: boolean;
+  who?: string | null;
+}) {
+  const names = useNames();
+  const path = `/api/reports/receivables${buildQuery({ user_id: me, include_pending: pending })}`;
+  const report = useGet<Receivables>(["reports", "receivables", path], path);
+  const forecast = report.data?.forecast;
+  // R14.28: grouped by month, then person (cards summed; the breakdown is shown below)
+  const items = (forecast?.items ?? []).filter((i) =>
+    who ? i.counterparty_user_id === who : true,
+  );
+  if (!forecast || items.length === 0) return null;
+  const months = [...new Set(items.map((i) => i.invoice_month))].sort();
+  const totalOf = (rows: ForecastReceivable[], d: "receive" | "pay") =>
+    sumMoney(rows.filter((r) => r.direction === d).map((r) => r.amount));
+  return (
+    <Panel
+      title="Previsto"
+      icon={<IconCalendarTime size={18} stroke={1.8} />}
+      description="O que vão te dever (ou você vai dever) pelas assinaturas, gastos recorrentes e parcelas divididas, neste mês e nos 2 próximos, por mês e por pessoa. Vira recebimento de verdade quando a fatura ou o extrato chegar."
+      interactive={false}
+    >
+      <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <div>
+            <Text size="xs" c="dimmed">
+              Previsto a receber
+            </Text>
+            <MoneyText
+              value={totalOf(items, "receive")}
+              tone="positive"
+              fw={700}
+            />
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">
+              Previsto a pagar
+            </Text>
+            <MoneyText value={totalOf(items, "pay")} tone="negative" fw={700} />
+          </div>
+        </SimpleGrid>
+        <Table.ScrollContainer minWidth={640}>
+          <Table aria-label="Previsto">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Mês</Table.Th>
+                <Table.Th>Pessoa</Table.Th>
+                <Table.Th>De onde</Table.Th>
+                <Table.Th ta="right">Valor</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {months.flatMap((m) => {
+                const ofMonth = items.filter((i) => i.invoice_month === m);
+                const people = [
+                  ...new Set(
+                    ofMonth.map(
+                      (i) => `${i.counterparty_user_id}|${i.direction}`,
+                    ),
+                  ),
+                ];
+                return people.map((key, k) => {
+                  const [person, direction] = key.split("|") as [
+                    string,
+                    "receive" | "pay",
+                  ];
+                  const rows = ofMonth.filter(
+                    (i) =>
+                      i.counterparty_user_id === person &&
+                      i.direction === direction,
+                  );
+                  return (
+                    <Table.Tr key={`${m}-${key}`}>
+                      <Table.Td fw={k === 0 ? 600 : undefined}>
+                        {k === 0 ? formatMonth(m) : ""}
+                      </Table.Td>
+                      <Table.Td>
+                        {names.users[person] ?? person}{" "}
+                        <StatusBadge
+                          tone={direction === "receive" ? "success" : "warning"}
+                        >
+                          {direction === "receive" ? "te deve" : "você deve"}
+                        </StatusBadge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">
+                          {rows
+                            .map(
+                              (r) =>
+                                `${names.owner(r.card_id ?? r.account_id)} ${formatMoney(r.amount)}`,
+                            )
+                            .join(" · ")}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <MoneyText
+                          value={sumMoney(rows.map((r) => r.amount))}
+                          fw={600}
+                        />
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                });
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      </Stack>
     </Panel>
   );
 }

@@ -221,6 +221,12 @@ def anticipated_at_bank(
     return c.transactions.anticipated_at_bank(plan_id, body.from_n).model_dump(mode="json")
 
 
+@router.get("/installment-plans-progress", tags=["installment-plans"])
+def plan_progress(c: AppContext = Depends(ctx)) -> dict[str, dict[str, Any]]:
+    """R14.19: per plan, status + how many charges and how much is still to come."""
+    return c.reports.plan_progress()
+
+
 @router.get("/installment-plans-status", tags=["installment-plans"])
 def plan_statuses(c: AppContext = Depends(ctx)) -> dict[str, str]:
     return c.reports.plan_statuses()
@@ -250,7 +256,8 @@ def recurring_action(
             raise Invalid("date_required", "skip needs the planned date")
         new = recurrence.skip(rec, body.date)
     elif body.action == "end":
-        new = recurrence.end(rec, c.clock.today())
+        paid = {m for rid, m in c.reports.ledger().recurring_paid if rid == rec.id}
+        new = recurrence.end(rec, c.clock.today(), paid)
     elif body.action == "resume":
         new = recurrence.resume(rec, body.date, c.clock.today())
     else:
@@ -278,6 +285,12 @@ def projection(
     user_id: str | None = None, include_pending: bool = False, c: AppContext = Depends(ctx)
 ) -> dict[str, Any]:
     return c.reports.projection(user_id, include_pending)
+
+
+@router.get("/reports/household", tags=["reports"])
+def household(month: Month, c: AppContext = Depends(ctx)) -> dict[str, Any]:
+    """R14.26: Contas da casa of a month (expected, paid, due date, status)."""
+    return c.reports.household(month)
 
 
 @router.get("/reports/month-items", tags=["reports"])

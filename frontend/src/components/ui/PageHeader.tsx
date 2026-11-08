@@ -1,4 +1,5 @@
 import { Group, Stack, Text, Title } from "@mantine/core";
+import { T, TNode } from "../../i18n/i18n";
 import type { ReactNode } from "react";
 
 export interface PageHeaderProps {
@@ -35,13 +36,15 @@ export function PageHeader({
           <div>
             {eyebrow && (
               <Text className="et-eyebrow" size="xs" fw={700}>
-                {eyebrow}
+                <T>{eyebrow}</T>
               </Text>
             )}
-            <Title order={2}>{title}</Title>
+            <Title order={2}>
+              <T>{title}</T>
+            </Title>
             {subtitle && (
               <Text size="sm" c="dimmed" mt={4} maw={720}>
-                {subtitle}
+                <TNode>{subtitle}</TNode>
               </Text>
             )}
           </div>

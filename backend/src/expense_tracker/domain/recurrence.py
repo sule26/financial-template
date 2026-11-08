@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -90,9 +90,24 @@ def recurring_charges(
     ]
 
 
-def overdue(rec: RecurringPurchase, today: date) -> date | None:
-    """First planned date already beyond tolerance with no purchase (R12.4), if any."""
-    upcoming = occurrences(rec, today)
+def _unpaid(rec: RecurringPurchase, dates: list[date], paid: Collection[str]) -> list[date]:
+    """R14.26: a bill's due dates in months already paid are not pending any more."""
+    return [d for d in dates if month_of(d) not in paid]
+
+
+def bill_month(rec: RecurringPurchase, paid_on: date) -> str:
+    """R14.26: month of the bill a payment on ``paid_on`` settles: the nearest due date."""
+    horizon = paid_on + timedelta(days=2 * rec.every.days)
+    dates = [rec.last_date, *occurrences(rec.model_copy(update={"active": True}), horizon)]
+    return month_of(min(dates, key=lambda d: (abs((d - paid_on).days), d)))
+
+
+def overdue(rec: RecurringPurchase, today: date, paid: Collection[str] = ()) -> date | None:
+    """First planned date already beyond tolerance with no purchase (R12.4), if any.
+
+    ``paid``: months of a household bill already paid (they never move the schedule).
+    """
+    upcoming = _unpaid(rec, occurrences(rec, today), paid)
     if upcoming and (today - upcoming[0]).days > tolerance_days(rec):
         return upcoming[0]
     return None
@@ -112,7 +127,9 @@ def skip(rec: RecurringPurchase, planned: date) -> RecurringPurchase:
     return rec.model_copy(update={"skipped_dates": sorted({*rec.skipped_dates, planned})})
 
 
-def end(rec: RecurringPurchase, today: date | None = None) -> RecurringPurchase:
+def end(
+    rec: RecurringPurchase, today: date | None = None, paid: Collection[str] = ()
+) -> RecurringPurchase:
     """Desativar (R14.11): opens a pause from this month on, keeping the history.
 
     Without ``today`` (legacy call) it only switches the purchase off.
@@ -120,8 +137,11 @@ def end(rec: RecurringPurchase, today: date | None = None) -> RecurringPurchase:
     if today is None:
         return rec.model_copy(update={"active": False})
     # From the first purchase that did not happen yet (an overdue one included), else today.
-    pending = occurrences(rec, today)
+    pending = _unpaid(rec, occurrences(rec, today), paid)
     month = month_of(pending[0]) if pending else month_of(today)
+    if rec.group == "household":
+        # a bill: past months keep their state (paid or late), R14.27 "meses anteriores não mudam"
+        month = max(month, month_of(today))
     if rec.paused_in(month):
         return rec
     return rec.model_copy(update={"pauses": [*rec.pauses, Pause(from_month=month)]})

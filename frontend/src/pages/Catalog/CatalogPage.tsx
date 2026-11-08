@@ -81,7 +81,7 @@ export const CATALOG_TABS: {
   },
   {
     value: "recorrentes",
-    label: "Compras recorrentes",
+    label: "Gastos recorrentes",
     icon: IconCalendarRepeat,
     panel: RecurringTab,
   },

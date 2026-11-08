@@ -109,9 +109,7 @@ Desvios e decisões tomadas durante a task vão numa linha `Notas:` logo abaixo 
 - [ ] Fluxo de caixa mensal (renda − faturas − assinaturas)
 - [ ] Relatório por pessoa (PDF/CSV)
 - [ ] Backup versionado de `data/` (git interno por importação confirmada)
-- [ ] Compras internacionais (IOF/câmbio)
 - [ ] Contas com caixa compartilhado (`funding: pooled`) — ver pergunta aberta em docs/08
-- [ ] Importar posição de corretora / OFX
 - [x] Pin das imagens base por digest (docs/13 Supply chain)
 - [x] Teste de propriedade da sync (sequências aleatórias de mv/cp/rm/edição sem perder confirmados)
 - [x] Checagem de consistência na tela Status (arquivo confirmado sem lançamentos)
@@ -120,14 +118,44 @@ Desvios e decisões tomadas durante a task vão numa linha `Notas:` logo abaixo 
 
 Ordem: primeiro o que corrige o que o operador já vê errado (T7.1–T7.3), depois modelo novo (T7.4, T7.5), por fim o cadastro guiado (T7.6). Toda task de UI termina com `task ui-tour` e revisão das capturas (R14.7).
 
+Verificação: testes escritos pelo mesmo agente que implementou (ambiente sem subagent `dev` separado — verificação independente de testes pulada); revisão independente (semantic reviewer) achou 4 P1 + 6 P2, todos corrigidos com teste de regressão.
+
 - [x] T7.0 Tour visual `task ui-tour` (seed sintético, todas as telas/abas, claro e escuro, falha em erro de console/API 5xx) + docs/11 (R14.7)
-- [ ] T7.1 Renda da casa sem pessoa selecionada; tabelas sem corte; rótulos técnicos traduzidos (R14.6) — depends on: T7.0
-- [ ] T7.2 Rótulo inequívoco de cartão/conta em todas as telas (R14.3) — depends on: T7.0
-- [ ] T7.3 Projeção só com cartões; itens do mês filtrados por pessoa (R14.2) — depends on: T7.2
-- [ ] T7.4 Várias rendas por usuário e renda pontual (R14.4) — depends on: T7.1
-- [ ] T7.5 Vários responsáveis com percentual em conta/cartão (R14.1) — depends on: T7.0
-- [ ] T7.6 Cadastro de cartão (e conta) guiado (R14.5) — depends on: T7.2, T7.5
-- [ ] T7.7 Revisão de fatura só com gastos (R14.8)
-- [ ] T7.8 Histórico de preço, divisão visível, desativar/reativar e períodos desativados em assinaturas e recorrentes (R14.9–R14.11)
-- [ ] T7.9 Cabeçalho sem "livro-caixa pessoal" (R14.12)
-- [ ] T7.10 Idioma pt-BR / en (R14.13) — depends on: T7.1–T7.9
+- [x] T7.1 Renda da casa sem pessoa selecionada; tabelas sem corte; rótulos técnicos traduzidos (R14.6) — depends on: T7.0
+  Notas: renda da casa = soma da renda de todos sem pessoa; selos sem corte; coluna Ações fixa à direita; abas quebram linha; `owners:account` traduzido. Testes `test_r14_6_*`, `r14_6_*`.
+- [x] T7.2 Rótulo inequívoco de cartão/conta em todas as telas (R14.3) — depends on: T7.0
+  Notas: só nomes repetidos ganham sufixo (cartão ••final / adicional / conta / benefício / dinheiro); usado em `useNames().owner`, IdSelect e selects. Testes `r14_3_*`.
+- [x] T7.3 Projeção só com cartões; itens do mês filtrados por pessoa (R14.2) — depends on: T7.2
+  Notas: `cards_view` no domínio; renda comprometida continua contando contas; `month-items?cards_only&user_id` (parte da pessoa, com `total_amount`). Testes `test_r14_2_*`, `r14_2_*`.
+- [x] T7.4 Várias rendas por usuário e renda pontual (R14.4) — depends on: T7.1
+  Notas: `incomes` (rendas com nome) + `one_off_incomes`; legado `income_history` vira a renda "Renda" ao salvar; pontual não entra na divisão proporcional (decisão confirmada pelo operador). Testes `test_r14_4_*`, `r14_4_*`.
+- [x] T7.5 Vários responsáveis com percentual em conta/cartão (R14.1) — depends on: T7.0
+  Notas: `responsibles` (lista ou padrão de divisão) herdado junto com o principal; dívida = parte × % de cada pagador; resíduo ao principal; "repassar para" por pagador. Testes `test_r14_1_*`.
+- [x] T7.6 Cadastro de cartão (e conta) guiado (R14.5) — depends on: T7.2, T7.5
+  Notas: seções Identificação / Quem usa e quem paga / Fatura / Leitura do PDF, banco numa lista, pasta da inbox, resumo ao vivo; adicional sem fatura própria. Testes `r1_10 *`, `r6_9 *` atualizados.
+- [x] T7.7 Revisão de fatura só com gastos (R14.8)
+  Notas: linhas não-gasto da fatura não são encenadas; tipo só Gasto/Estorno/Tarifa/Investimento (`422 invalid_kind`). Testes `test_r14_8_*`, `r14_8_*`.
+- [x] T7.8 Histórico de preço, divisão visível, desativar/reativar e períodos desativados em assinaturas e recorrentes (R14.9–R14.11)
+  Notas: `price_history` e `pauses` em assinaturas e recorrentes; Desativar abre período a partir da 1ª compra não ocorrida, Ativar fecha no mês anterior; editores em Cadastros, Ativar/Desativar em Lançamentos → Recorrentes. Testes `test_r14_9_*`–`test_r14_11_*`, `r14_10_*`, `r14_11_*`.
+- [x] T7.9 Cabeçalho sem "livro-caixa pessoal" (R14.12)
+  Notas: "controle financeiro" (pedido do operador).
+- [x] T7.10 Idioma pt-BR / en (R14.13) — depends on: T7.1–T7.9
+  Notas: base i18n (`src/i18n`): cabeçalho, navegação, títulos/descrições de páginas e painéis, selos e formatos (R$ sempre). Textos internos de formulários ainda em português — traduzir acrescentando entradas em `en.ts`. Testes `r14_13_*`.
+- [x] T7.11 "A receber" previsto, "Padrão" explicado, ajuda da última compra recorrente (R14.14–R14.16)
+  Notas: "Previsto" fora dos totais (janela hoje: este mês + 2, ver T7.18); "Padrão = donos do cartão X — …"; ajuda da última compra. Testes `test_r14_15_*`, `r14_15_*`, `r14_16_*`.
+- [x] T7.12 Lançamento em outro mês não some; cor de destaque na cédula, logo e favicon (R14.17, R14.18)
+  Notas: lançamento rápido muda o mês da tela e avisa; cédula/logo seguem a cor (p[8]/p[9], AA verificado) e favicon dinâmico. Testes `r14_17_*`, `r14_18_*`.
+- [x] T7.13 Parcelamentos: parcela N/M nos lançamentos, quanto falta, terminando, esconder terminados, editar, valor por mês (R14.19–R14.21)
+  Notas: `installment` (n/of) nos itens do mês; `GET /api/installment-plans-progress`; `terminando` ≤ 3; terminados escondidos; editar (agenda só em planos manuais, a API recusa nos importados); ações raras em "Mais…". Testes `test_r14_19_*`, `test_r14_20_*`, `test_r14_21_*`.
+- [x] T7.14 Data limite do PIX pelo cartão vinculado; trocar meio de pagamento de lançamento manual (R14.22, R14.23)
+  Notas: prazo do PIX = vencimento da fatura em que uma compra no cartão no mesmo dia cairia (achado da revisão: antes nascia vencido); trocar meio de pagamento recalcula `provisional`. Testes `test_r14_22_*`, `test_r14_23_*`.
+- [x] T7.15 Contas da casa: tipo "Conta da casa" em Assinaturas, vencimento, tela do mês, registrar pagamento, sem dupla contagem (R14.26)
+  Notas: assinatura com `group = household` e `due_day`; pagamento vinculado guarda o mês da conta (`links.subscription_month`, achado da revisão: pagar no cartão ou atrasado caía no mês errado); vínculo preservado ao absorver na Revisão; sem dupla contagem. Testes `test_r14_26_*`, `r14_26_*`.
+- [x] T7.16 Descrição das categorias; pessoa(s) padrão e Resumo/Projeção por grupo de pessoas (R14.24, R14.25)
+  Notas: descrições padrão também preenchidas em instalações existentes (achado da revisão); pessoa(s) padrão em Configurações; `user_id` com vários ids. Testes `test_r14_24_*`, `test_r14_25_*`, `r14_24_*`, `r14_25_*`.
+- [x] T7.17 Contas da casa em Gastos recorrentes (renomeado); divisão a partir de um mês (R14.26, R14.27)
+  Notas: `RecurringPurchase.group = household` (ocorrência = vencimento; pagar não reancora; `links.recurring_month`); `allocation_history` em assinaturas e gastos recorrentes, editor "Mudanças de divisão". Testes `test_r14_26_*`, `test_r14_27_*`, `r14_27_*`.
+- [x] T7.18 A receber por pessoa e período, Previsto por mês e pessoa (3 meses), último reajuste como preço principal (R14.15, R14.28)
+  Notas: abas por pessoa (confirmado + previsto, filtra saldos), Vencimento (padrão: próximo mês; vencidos sempre aparecem), totais por pessoa clicáveis; Previsto = este mês + 2; achados da 2ª revisão (conta da casa: pendente/alerta/Desativar pelo mês não pago, linha da Revisão marca o mês sem mover datas, divisão pelo mês da conta). Testes `r14_28_*`, `r14_15_*`, `test_r14_26_*`, `test_r14_27_*`.
+- [ ] T7.19 Previstos do mês em Lançamentos; próxima data e "todo dia X" em Gastos recorrentes (R14.29, R14.30)
+  Notas: painel "Previstos neste mês" (parcelas, assinaturas, recorrentes) a partir de `month-items`; "Próxima" calculada (conta da casa: primeiro vencimento a partir deste mês); "Todo dia X" = a cada 1 mês ancorado no dia X. Testes `r14_29_*`, `r14_30_*`. Pendente (3ª revisão): "todo dia X" deriva após compra real em outro dia (guardar o dia); âncora recuada não pode prever de novo a última compra; "Próxima" deve pular datas puladas/pausas também em gastos comuns.

@@ -358,3 +358,49 @@ describe("Cards tab", () => {
     ).toMatch(/100%/);
   });
 });
+
+describe("guided card form (R14.5)", () => {
+  it("r14_5 shows sections, the inbox folder, the bank list and the live summary", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/profiles": {
+        profiles: [],
+        plugins: [],
+        errors: {},
+        examples: [
+          { id: "inter-fatura", name: "Inter (fatura)", kind: "fatura" },
+        ],
+      },
+    });
+    open("cartoes");
+    await screen.findByText("Cartão X");
+    await userEvent.click(screen.getByRole("button", { name: "Novo" }));
+    const modal = await dialog();
+    for (const section of [
+      "Identificação",
+      "Quem usa e quem paga",
+      "Fatura",
+      "Leitura do PDF",
+    ])
+      expect(
+        within(modal).getByRole("group", { name: section }),
+      ).toBeInTheDocument();
+    await userEvent.type(within(modal).getByLabelText(/^Nome/), "Meu Inter");
+    expect(
+      within(modal).getByText("inbox/faturas/meu inter/"),
+    ).toBeInTheDocument();
+    const bank = within(modal).getByLabelText("Banco (leitura do PDF)");
+    expect(
+      within(bank).getByRole("option", { name: "Inter (fatura)" }),
+    ).toBeInTheDocument();
+    // live summary: linking the account inherits its owners
+    await userEvent.selectOptions(
+      within(modal).getByLabelText("Conta vinculada"),
+      "acc_x",
+    );
+    const summary = within(modal).getByLabelText(
+      "Resumo de quem usa e quem paga",
+    );
+    expect(summary).toHaveTextContent("herdado da conta Conta X");
+  });
+});

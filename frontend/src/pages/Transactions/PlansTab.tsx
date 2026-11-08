@@ -2,8 +2,11 @@ import {
   Alert,
   Button,
   Group,
+  Menu,
   Modal,
+  NumberInput,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -11,8 +14,15 @@ import {
 import { MonthField } from "../../components/ui/MonthField";
 import { notifications } from "@mantine/notifications";
 import { useState, type FormEvent } from "react";
-import { useAction, useGet, useList, useNames } from "../../api/hooks";
-import type { InstallmentPlan } from "../../api/types";
+import { useAction, useGet, useList, useNames, useSave } from "../../api/hooks";
+import type { Allocation, InstallmentPlan } from "../../api/types";
+import {
+  AllocationPicker,
+  allocationValid,
+} from "../../components/AllocationPicker";
+import { CategorySelect } from "../../components/CategorySelect";
+import { useDefaultSplit } from "../../components/defaultSplit";
+import { IdSelect } from "../Catalog/shared";
 import { QueryState, errorText } from "../../components/QueryState";
 import { formatMonth } from "../../hooks/month";
 import { formatMoney, parseMoneyInput } from "../../lib/format";
@@ -20,12 +30,25 @@ import { StatusBadge, toneFromColor } from "../../components/ui";
 
 const STATUS_COLORS: Record<string, string> = {
   pago: "green",
-  "quase acabando": "yellow",
+  terminando: "yellow",
   "em andamento": "blue",
   cancelado: "gray",
 };
 
 type PlanAction = "anticipate" | "cancel" | "bank";
+
+/** GET /api/installment-plans-progress (R14.19). */
+interface Progress {
+  status: string;
+  remaining: number;
+  remaining_amount: string;
+  next_n: number | null;
+  next_month: string | null;
+  next_amount: string | null;
+  /** R14.21: the monthly installment value. */
+  installment_amount: string;
+}
+const FINISHED = new Set(["pago", "cancelado"]);
 
 const ACTION_TITLES: Record<PlanAction, string> = {
   anticipate: "Antecipar parcelamento",
@@ -43,6 +66,12 @@ export function PlansTab() {
     ["installment-plans-status"],
     "/api/installment-plans-status",
   );
+  const progress = useGet<Record<string, Progress>>(
+    ["installment-plans-progress"],
+    "/api/installment-plans-progress",
+  );
+  const [showFinished, setShowFinished] = useState(false);
+  const [editing, setEditing] = useState<InstallmentPlan | null>(null);
   const names = useNames();
   const [action, setAction] = useState<{
     plan: InstallmentPlan;
@@ -52,15 +81,38 @@ export function PlansTab() {
     "del",
     (id) => `/api/installment-plans/${encodeURIComponent(id)}/anticipation`,
   );
-  const rows = plans.data ?? [];
+  const all = plans.data ?? [];
+  const statusOf = (p: InstallmentPlan) =>
+    progress.data?.[p.id]?.status ?? statuses.data?.[p.id];
+  // R14.19: finished (paid or cancelled) plans leave the list unless asked for.
+  const rows = all.filter(
+    (p) => showFinished || !FINISHED.has(statusOf(p) ?? ""),
+  );
+  const hidden = all.length - rows.length;
 
   return (
     <>
+      <Group justify="space-between" mb="sm">
+        <Text size="sm" c="dimmed">
+          {hidden > 0 && !showFinished
+            ? `${hidden} parcelamento(s) terminado(s) escondido(s).`
+            : " "}
+        </Text>
+        <Switch
+          label="Mostrar terminados"
+          checked={showFinished}
+          onChange={(e) => setShowFinished(e.currentTarget.checked)}
+        />
+      </Group>
       <QueryState
         isLoading={plans.isLoading}
         error={plans.error}
         empty={rows.length === 0}
-        emptyText="Nenhum parcelamento."
+        emptyText={
+          hidden > 0
+            ? "Nenhum parcelamento em andamento."
+            : "Nenhum parcelamento."
+        }
       >
         <Table.ScrollContainer minWidth={900} className="et-table-card">
           <Table striped>
@@ -71,6 +123,7 @@ export function PlansTab() {
                 <Table.Th>Parcelas</Table.Th>
                 <Table.Th ta="right">Total</Table.Th>
                 <Table.Th>1ª fatura</Table.Th>
+                <Table.Th>Falta</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Antecipação</Table.Th>
                 <Table.Th className="et-sticky-end">Ações</Table.Th>
@@ -78,7 +131,8 @@ export function PlansTab() {
             </Table.Thead>
             <Table.Tbody>
               {rows.map((plan) => {
-                const status = statuses.data?.[plan.id];
+                const status = statusOf(plan);
+                const prog = progress.data?.[plan.id];
                 const ant = plan.anticipation;
                 const locked = !!ant && ant.linked_fingerprints.length > 0;
                 return (
@@ -93,14 +147,40 @@ export function PlansTab() {
                     </Table.Td>
                     <Table.Td>{names.owner(plan.card_id)}</Table.Td>
                     <Table.Td>
-                      {plan.total_installments}x{" "}
-                      {plan.installment_amount &&
-                        formatMoney(plan.installment_amount)}
+                      {plan.total_installments}x de{" "}
+                      <b>
+                        {formatMoney(
+                          prog?.installment_amount ?? plan.installment_amount,
+                        )}
+                      </b>
+                      <Text size="xs" c="dimmed">
+                        por mês
+                      </Text>
                     </Table.Td>
                     <Table.Td ta="right">
                       {formatMoney(plan.total_amount)}
                     </Table.Td>
                     <Table.Td>{formatMonth(plan.first_invoice_month)}</Table.Td>
+                    <Table.Td>
+                      {prog && prog.remaining > 0 ? (
+                        <>
+                          <Text size="sm">
+                            {prog.remaining}x ·{" "}
+                            {formatMoney(prog.remaining_amount)}
+                          </Text>
+                          {prog.next_n && prog.next_month && (
+                            <Text size="xs" c="dimmed">
+                              próxima: {prog.next_n}/{plan.total_installments}{" "}
+                              em {formatMonth(prog.next_month)}
+                              {prog.next_amount &&
+                                ` (${formatMoney(prog.next_amount)})`}
+                            </Text>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </Table.Td>
                     <Table.Td>
                       {status && (
                         <StatusBadge
@@ -130,6 +210,14 @@ export function PlansTab() {
                     </Table.Td>
                     <Table.Td className="et-sticky-end">
                       <Group gap={4} wrap="nowrap">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => setEditing(plan)}
+                          aria-label={`Editar ${plan.description}`}
+                        >
+                          Editar
+                        </Button>
                         {ant ? (
                           <Button
                             size="xs"
@@ -159,23 +247,35 @@ export function PlansTab() {
                             Antecipar
                           </Button>
                         )}
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          onClick={() => setAction({ plan, kind: "bank" })}
-                          aria-label={`Antecipada no banco: ${plan.description}`}
-                        >
-                          Antecipada no banco
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          color="red"
-                          onClick={() => setAction({ plan, kind: "cancel" })}
-                          aria-label={`Cancelar ${plan.description}`}
-                        >
-                          Cancelar
-                        </Button>
+                        {/* R14.6: rarer actions in a menu so the row fits and Status stays visible */}
+                        <Menu position="bottom-end" withinPortal>
+                          <Menu.Target>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              aria-label={`Mais ações de ${plan.description}`}
+                            >
+                              Mais…
+                            </Button>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              onClick={() => setAction({ plan, kind: "bank" })}
+                              aria-label={`Antecipada no banco: ${plan.description}`}
+                            >
+                              Antecipada no banco
+                            </Menu.Item>
+                            <Menu.Item
+                              color="red"
+                              onClick={() =>
+                                setAction({ plan, kind: "cancel" })
+                              }
+                              aria-label={`Cancelar ${plan.description}`}
+                            >
+                              Cancelar
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
                       </Group>
                     </Table.Td>
                   </Table.Tr>
@@ -185,6 +285,15 @@ export function PlansTab() {
           </Table>
         </Table.ScrollContainer>
       </QueryState>
+      <Modal
+        opened={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Editar parcelamento"
+      >
+        {editing && (
+          <PlanEditForm plan={editing} onDone={() => setEditing(null)} />
+        )}
+      </Modal>
       <Modal
         opened={action !== null}
         onClose={() => setAction(null)}
@@ -301,6 +410,139 @@ export function PlanActionForm({
           </Button>
           <Button type="submit" loading={run.isPending}>
             Confirmar
+          </Button>
+        </Group>
+      </Stack>
+    </form>
+  );
+}
+
+/**
+ * R14.20: edit a plan after it was created. Description, category and split always; the
+ * schedule (card, amount, installments, first invoice) only for plans entered by hand, since an
+ * imported plan follows the invoice.
+ */
+export function PlanEditForm({
+  plan,
+  onDone,
+}: {
+  plan: InstallmentPlan;
+  onDone: () => void;
+}) {
+  const cards = (useList("cards").data ?? []).filter(
+    (c) => c.parent_card_id === null || c.id === plan.card_id,
+  );
+  const save = useSave("installment-plans");
+  const manual = plan.origin.type === "manual";
+  const [description, setDescription] = useState(plan.description);
+  const [cardId, setCardId] = useState<string | null>(plan.card_id);
+  const [total, setTotal] = useState(plan.total_amount.replace(".", ","));
+  const [count, setCount] = useState<number>(plan.total_installments);
+  const [first, setFirst] = useState(plan.first_invoice_month);
+  const [categoryId, setCategoryId] = useState<string | null>(plan.category_id);
+  const [allocations, setAllocations] = useState<Allocation | null>(
+    plan.allocations,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const defaultHint = useDefaultSplit(cardId, null);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!description.trim()) return setError("Descrição: obrigatória");
+    const amount = parseMoneyInput(total);
+    if (manual) {
+      if (!amount || Number(amount) <= 0)
+        return setError("Valor total inválido");
+      if (!Number.isInteger(count) || count < 1 || count > 120)
+        return setError("Parcelas: entre 1 e 120");
+      if (!first) return setError("1ª fatura: escolha o mês");
+      if (!cardId) return setError("Cartão: obrigatório");
+    }
+    if (!allocationValid(allocations))
+      return setError("Divisão inválida: os percentuais precisam somar 100%");
+    setError(null);
+    const body: InstallmentPlan = {
+      ...plan,
+      description: description.trim(),
+      category_id: categoryId,
+      allocations,
+      ...(manual
+        ? {
+            card_id: cardId ?? plan.card_id,
+            total_amount: amount ?? plan.total_amount,
+            total_installments: count,
+            first_invoice_month: first,
+            // the per-installment amount follows the new total (rest on the 1st, R1.2)
+            installment_amount: null,
+          }
+        : {}),
+    };
+    save.mutate(body, { onSuccess: onDone });
+  };
+
+  return (
+    <form onSubmit={submit} noValidate>
+      <Stack gap="sm">
+        <TextInput
+          label="Descrição"
+          value={description}
+          onChange={(e) => setDescription(e.currentTarget.value)}
+        />
+        {manual ? (
+          <>
+            <IdSelect
+              label="Cartão"
+              value={cardId}
+              onChange={setCardId}
+              options={cards}
+              required
+            />
+            <Group grow>
+              <TextInput
+                label="Valor total"
+                inputMode="decimal"
+                value={total}
+                onChange={(e) => setTotal(e.currentTarget.value)}
+              />
+              <NumberInput
+                label="Parcelas"
+                min={1}
+                max={120}
+                allowDecimal={false}
+                value={count}
+                onChange={(v) => setCount(Math.trunc(Number(v || 0)))}
+              />
+            </Group>
+            <MonthField
+              label="1ª fatura"
+              clearable={false}
+              value={first}
+              onChange={setFirst}
+            />
+          </>
+        ) : (
+          <Text size="xs" c="dimmed">
+            Parcelamento vindo da fatura: valores e meses seguem o que o banco
+            cobra. Aqui você muda descrição, categoria e divisão.
+          </Text>
+        )}
+        <CategorySelect value={categoryId} onChange={setCategoryId} />
+        <AllocationPicker
+          value={allocations}
+          onChange={setAllocations}
+          defaultHint={defaultHint}
+        />
+        {(error || save.error) && (
+          <Alert color="red" role="alert">
+            {error ?? errorText(save.error)}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onDone}>
+            Voltar
+          </Button>
+          <Button type="submit" loading={save.isPending}>
+            Salvar
           </Button>
         </Group>
       </Stack>

@@ -78,9 +78,10 @@ def test_r1_2_single_installment_and_year_turn() -> None:
     ("h", "expected"),
     [
         ("2026-07", "em andamento"),
-        ("2027-03", "em andamento"),  # 3 left: 03, 04, 05
-        ("2027-04", "quase acabando"),  # 2 left
-        ("2027-05", "quase acabando"),  # 1 left
+        ("2027-02", "em andamento"),  # 4 left: 02, 03, 04, 05
+        ("2027-03", "terminando"),  # R14.19: 3 left: 03, 04, 05
+        ("2027-04", "terminando"),  # 2 left
+        ("2027-05", "terminando"),  # 1 left
         ("2027-06", "pago"),
     ],
 )
@@ -99,10 +100,10 @@ def test_r1_3_anticipation_counts_as_one_charge() -> None:
                       target_month="2026-12")  # fmt: skip
     # charges >= 2026-10: 3rd(10), 4th(11), 5th(12), anticipation(12) -> 4
     assert status(plan, "2026-10") == "em andamento"
-    # >= 2026-11: 4th, 5th, anticipation -> 3
-    assert status(plan, "2026-11") == "em andamento"
+    # >= 2026-11: 4th, 5th, anticipation -> 3 (R14.19: "terminando" from 3 left)
+    assert status(plan, "2026-11") == "terminando"
     # >= 2026-12: 5th + anticipation -> 2
-    assert status(plan, "2026-12") == "quase acabando"
+    assert status(plan, "2026-12") == "terminando"
     assert status(plan, "2027-01") == "pago"
 
 

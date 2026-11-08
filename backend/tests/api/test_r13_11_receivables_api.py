@@ -59,6 +59,8 @@ def test_r13_11_receivables_endpoint(world: Api) -> None:
         },
     )
     rep = world.get("/api/reports/receivables", params={"user_id": "usr_ana"}).json()
+    # R14.15: no forecasts here (only real purchases)
+    assert rep.pop("forecast") == {"items": [], "totals": {"receive": "0.00", "pay": "0.00"}}
     assert rep == {
         "user_id": "usr_ana",
         "items": [

@@ -57,6 +57,33 @@ async function openForm(user: ReturnType<typeof userEvent.setup>) {
 describe("QuickEntry", () => {
   beforeEach(() => window.localStorage.clear());
 
+  it("r14_17 an entry landing in another month switches the app to that month", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/accounts": ACCOUNTS,
+      "GET /api/transactions/suggest": SUGGEST,
+      "POST /api/transactions": {
+        transaction: { id: "tx1", invoice_month: "2030-01" },
+        reconciliation: { status: "projected" },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage(<QuickEntryButton />);
+    await openForm(user);
+    await user.type(screen.getByRole("textbox", { name: /Valor/ }), "90,00");
+    await user.type(
+      screen.getByRole("textbox", { name: /Descrição/ }),
+      "Dentista",
+    );
+    await pick(user, /Categoria/, "Casa");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    expect(
+      await screen.findByText(
+        /Entrou na fatura\/mês de jan\/2030: mostrando esse mês/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("r10_1 sends the manual entry with the right body", async () => {
     const { calls } = mockApi({
       ...CATALOG,

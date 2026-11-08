@@ -106,6 +106,8 @@ export interface Category {
   name: string;
   color: string;
   budget: Money | null;
+  /** R14.24: what goes in this category. */
+  description?: string | null;
 }
 export interface SavingsGoal {
   id: string;
@@ -207,6 +209,18 @@ export interface Subscription {
   end_month: MonthStr | null;
   category_id: string | null;
   allocations: Allocation | null;
+  /** R14.9: reajustes from a month on. */
+  price_history?: { from_month: MonthStr; amount: Money }[];
+  /** R14.11: months it was off (until null = still off). */
+  pauses?: { from_month: MonthStr; until_month: MonthStr | null }[];
+  /** R14.27: the split from a month on (null = back to "Padrão"). */
+  allocation_history?: {
+    from_month: MonthStr;
+    allocations: Allocation | null;
+  }[];
+  /** R14.26: "household" = conta da casa (luz, água, aluguel…). */
+  group?: "subscription" | "household";
+  due_day?: number | null;
 }
 export interface RecurringPurchase {
   id: string;
@@ -223,6 +237,17 @@ export interface RecurringPurchase {
   active: boolean;
   skipped_dates: string[];
   next_date: string | null;
+  /** R14.9: estimated price from a month on (month of the purchase). */
+  price_history?: { from_month: MonthStr; amount: Money }[];
+  /** R14.11: months it was off (until null = still off). */
+  pauses?: { from_month: MonthStr; until_month: MonthStr | null }[];
+  /** R14.27: the split from a month on (null = back to "Padrão"). */
+  allocation_history?: {
+    from_month: MonthStr;
+    allocations: Allocation | null;
+  }[];
+  /** R14.26: "household" = conta da casa (occurrence date = due date). */
+  group?: "purchase" | "household";
 }
 export interface Rule {
   id: string;
@@ -422,9 +447,23 @@ export interface ReceivableItem {
   remaining: Money;
   status: "open" | "partial" | "received";
 }
+/** R14.15: what people are expected to owe from forecasts (not settled, not in totals). */
+export interface ForecastReceivable {
+  counterparty_user_id: string;
+  direction: "receive" | "pay";
+  card_id: string | null;
+  account_id: string | null;
+  invoice_month: MonthStr;
+  due_date: string | null;
+  amount: Money;
+}
 export interface Receivables {
   user_id: string;
   items: ReceivableItem[];
+  forecast?: {
+    items: ForecastReceivable[];
+    totals: { receive: Money; pay: Money };
+  };
   /** Sum of ``remaining`` per direction. */
   totals: { receive: Money; pay: Money };
 }

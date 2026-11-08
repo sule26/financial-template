@@ -258,12 +258,31 @@ class Confirmer:
                     result["allocation_origin"] = "manual"
                 if saved.note:
                     result["note"] = saved.note
+        links: dict[str, Any] = {}
         if manual.links.recurring_purchase_id:
-            result["links"] = {"recurring_purchase_id": manual.links.recurring_purchase_id}
+            links["recurring_purchase_id"] = manual.links.recurring_purchase_id
+            if manual.links.recurring_month:
+                links["recurring_month"] = manual.links.recurring_month
+        if manual.links.subscription_id:
+            # R14.26: the imported line keeps paying the same bill month
+            links["subscription_id"] = manual.links.subscription_id
+            links["subscription_month"] = manual.links.subscription_month or manual.invoice_month
+        if links:
+            result["links"] = links
         return result
 
     def _do_link_recurring(self, tx: Transaction, s: Suggestion) -> dict[str, Any]:
         rec = self.repo.get("recurring_purchases", s.target_id)
+        if rec is not None and rec.group == "household":
+            # R14.26: a bill keeps its due dates; the line pays the bill of the nearest one
+            from expense_tracker.domain.recurrence import bill_month
+
+            return {
+                "links": {
+                    "recurring_purchase_id": s.target_id,
+                    "recurring_month": bill_month(rec, tx.purchase_date),
+                }
+            }
         if rec is not None and tx.purchase_date > rec.last_date:
             self.repo.put("recurring_purchases", reanchor(rec, tx.purchase_date))
         return {"links": {"recurring_purchase_id": s.target_id}}

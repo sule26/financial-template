@@ -23,6 +23,7 @@ import {
   IconUsersGroup,
 } from "@tabler/icons-react";
 import { useState } from "react";
+import { knownPeople, readDefaultPeople } from "../../hooks/defaultPeople";
 import { useGet, useList, useNames, useRemove, useSave } from "../../api/hooks";
 import type { Balances, Settlement } from "../../api/types";
 import { ErrorMessage, QueryState } from "../../components/QueryState";
@@ -30,7 +31,12 @@ import { PageHeader, StatusBadge } from "../../components/ui";
 import { formatMonth, useMonth } from "../../hooks/month";
 import { formatDate, formatMoney, parseMoneyInput } from "../../lib/format";
 import { buildQuery, PendingSwitch, PersonSelect } from "../Summary/shared";
-import { UpcomingReceivables } from "./Upcoming";
+import {
+  ForecastReceivables,
+  ReceivableFilters,
+  UpcomingReceivables,
+  type Period,
+} from "./Upcoming";
 
 /** Absolute value of a decimal string, without going through floats. */
 function abs(value: string): string {
@@ -56,7 +62,12 @@ export function ReceivablesPage() {
   const [chosen, setChosen] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const me = chosen ?? users.data?.[0]?.id ?? null;
+  // R14.28: who owes (one person or everybody) and which deadlines to show
+  const [who, setWho] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>("next");
+  // R14.25: "Eu sou" starts with the first default person of Configurações
+  const preferred = knownPeople(readDefaultPeople(), users.data)[0];
+  const me = chosen ?? preferred ?? users.data?.[0]?.id ?? null;
   const path = me
     ? `/api/reports/balances${buildQuery({ user_id: me, include_pending: pending })}`
     : null;
@@ -83,13 +94,35 @@ export function ReceivablesPage() {
       >
         <PersonSelect
           value={me}
-          onChange={setChosen}
+          onChange={(v) => {
+            setChosen(v);
+            setWho(null); // R14.28: the person filter belongs to the previous "Eu sou"
+          }}
           label="Eu sou"
           allowAll={false}
         />
         <PendingSwitch checked={pending} onChange={setPending} />
       </PageHeader>
-      {me && <UpcomingReceivables me={me} pending={pending} />}
+      {me && (
+        <ReceivableFilters
+          me={me}
+          who={who}
+          onWho={setWho}
+          period={period}
+          onPeriod={setPeriod}
+          pending={pending}
+        />
+      )}
+      {me && (
+        <UpcomingReceivables
+          me={me}
+          pending={pending}
+          who={who}
+          period={period}
+          onWho={setWho}
+        />
+      )}
+      {me && <ForecastReceivables me={me} pending={pending} who={who} />}
       <QueryState
         isLoading={users.isLoading || balances.isLoading}
         error={users.error ?? balances.error}
@@ -97,7 +130,20 @@ export function ReceivablesPage() {
         emptyText="Nenhum saldo com outras pessoas."
         emptyIcon={<IconReceiptRefund size={26} stroke={1.6} />}
       >
-        {balances.data && <BalancesView data={balances.data} />}
+        {balances.data && (
+          <BalancesView
+            data={
+              who
+                ? {
+                    ...balances.data,
+                    people: balances.data.people.filter(
+                      (p) => p.user_id === who,
+                    ),
+                  }
+                : balances.data
+            }
+          />
+        )}
       </QueryState>
       {me && (
         <SettlementModal

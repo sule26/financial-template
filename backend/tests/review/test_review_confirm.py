@@ -654,3 +654,36 @@ def test_r3_13_internal_transfer_link_is_cleared_when_counterpart_disappears(w: 
     )
     remove_lines(w.repo, {"fp_gone"}, w.clock.now())
     assert got(w, "keep").links.internal_transfer_fingerprint is None
+
+
+def test_r14_26_match_manual_keeps_the_bill_link_and_month(w: World) -> None:
+    # A bill paid by hand (linked to the subscription) and later absorbed by the imported line:
+    # the imported line keeps paying the same bill month (review finding P1-2).
+    w.catalog.create(
+        "subscriptions",
+        {
+            "id": "sub_luz",
+            "description": "LUZ",
+            "amount": "100.00",
+            "start_month": "2026-01",
+            "card_id": "card_inter",
+            "group": "household",
+        },
+    )
+    manual = Transaction(
+        id="man",
+        source=Source(type="manual"),
+        provisional=True,
+        card_id="card_inter",
+        purchase_date=date(2026, 9, 20),
+        invoice_month=OCT,
+        description="Luz",
+        amount=D("10.00"),
+        category_id=HOME,
+        links=Links(subscription_id="sub_luz", subscription_month="2026-09"),
+    )
+    w.repo.put("transactions", manual)
+    staged(w, "a", Suggestion(type="match_manual", target_id="man"))
+    confirm(w, "a")
+    links = got(w, "a").links
+    assert (links.subscription_id, links.subscription_month) == ("sub_luz", "2026-09")

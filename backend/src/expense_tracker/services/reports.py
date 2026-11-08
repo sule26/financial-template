@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import calendar
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -12,6 +14,12 @@ from pydantic import BaseModel
 
 from expense_tracker.domain.allocation import AllocationError, resolve_allocation
 from expense_tracker.domain.documents import ManifestEntry
+from expense_tracker.domain.installments import (
+    installment_amounts,
+    remaining_amount,
+    remaining_count,
+    schedule,
+)
 from expense_tracker.domain.installments import status as plan_status
 from expense_tracker.domain.investments import contributions_by_goal, evolution, portfolio
 from expense_tracker.domain.ledger import (
@@ -21,10 +29,10 @@ from expense_tracker.domain.ledger import (
     LedgerState,
     projection_months,
 )
-from expense_tracker.domain.models import Settlement, Transaction
+from expense_tracker.domain.models import Settlement, Transaction, User
 from expense_tracker.domain.money import ZERO, Money, money_str
 from expense_tracker.domain.months import Month, add_months, month_of
-from expense_tracker.domain.recurrence import overdue
+from expense_tracker.domain.recurrence import occurrences, overdue
 from expense_tracker.domain.reports import (
     UNCATEGORIZED,
     amount_for,
@@ -119,6 +127,9 @@ def item_json(item: LedgerItem, ledger: Ledger) -> dict[str, Any]:
         "provisional": item.provisional,
         "forecast": item.is_forecast,
         "parts": _dict(ledger.parts_of(item)),
+        "installment": (
+            {"n": item.installment[0], "of": item.installment[1]} if item.installment else None
+        ),
     }
 
 
@@ -139,7 +150,7 @@ class Reports:
         months_back: int = 11,
     ) -> dict[str, Any]:
         ledger = self.ledger(include_pending)
-        user = self.repo.get("users", user_id) if user_id else None
+        user = self._people(user_id)
         months = [add_months(month, -i) for i in range(months_back, -1, -1)]
         views = ledger.months(months)
         series = []
@@ -158,7 +169,7 @@ class Reports:
             )
         current = summarize(ledger, views[-1], user, method)
         if user_id:
-            keep = self.relevant_owners(ledger, user_id, month) | set(current.by_card)
+            keep = self._relevant(ledger, user_id, month) | set(current.by_card)
             current.states = {k: v for k, v in current.states.items() if k in keep}
         year = month[:4]
         annual_views = ledger.months([f"{year}-{m:02d}" for m in range(1, 13)])
@@ -184,6 +195,25 @@ class Reports:
                 g: {"target": money_str(t), "achieved": money_str(a)} for g, (t, a) in goals.items()
             },
         }
+
+    def _people(self, user_id: str | None) -> list[User] | None:
+        """``user_id`` is one id or several separated by commas (R14.25: a group of people)."""
+        if not user_id:
+            return None
+        people = []
+        for uid in dict.fromkeys(u.strip() for u in user_id.split(",") if u.strip()):
+            user = self.repo.get("users", uid)
+            if user is None:
+                raise NotFound("not_found", f"user {uid} not found")
+            people.append(user)
+        return people or None
+
+    def _relevant(self, ledger: Ledger, user_id: str, month: str) -> set[str]:
+        out: set[str] = set()
+        for uid in user_id.split(","):
+            if uid.strip():
+                out |= self.relevant_owners(ledger, uid.strip(), month)
+        return out
 
     def relevant_owners(self, ledger: Ledger, user_id: str, month: str) -> set[str]:
         """Cards/accounts where the person is an owner or the responsible."""
@@ -219,7 +249,7 @@ class Reports:
 
     def projection(self, user_id: str | None, include_pending: bool) -> dict[str, Any]:
         ledger = self.ledger(include_pending)
-        user = self.repo.get("users", user_id) if user_id else None
+        user = self._people(user_id)
         months = projection_months(self.today)
         out = []
         for full in ledger.months(months):
@@ -227,7 +257,7 @@ class Reports:
             view = cards_view(ledger, full)
             s = summarize(ledger, view, user)
             if user_id:
-                keep = self.relevant_owners(ledger, user_id, view.month) | set(s.by_card)
+                keep = self._relevant(ledger, user_id, view.month) | set(s.by_card)
                 s.states = {k: v for k, v in s.states.items() if k in keep}
             out.append(
                 {
@@ -241,7 +271,7 @@ class Reports:
             )
         commitments = []
         for u in self.repo.all("users"):
-            if user_id and u.id != user_id:
+            if user_id and u.id not in {x.strip() for x in user_id.split(",")}:
                 continue
             rows = committed_income(ledger, ledger.months(months), u)
             if any(r.income is not None or r.benefit_income is not None for r in rows):
@@ -256,8 +286,7 @@ class Reports:
         cards_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Items of a month; ``cards_only`` and ``user_id`` (their part only) for R14.2."""
-        if user_id and self.repo.get("users", user_id) is None:
-            raise NotFound("not_found", f"user {user_id} not found")
+        people = self._people(user_id)
         ledger = self.ledger(include_pending)
         view = ledger.month(month)
         if cards_only:
@@ -265,8 +294,8 @@ class Reports:
         out = []
         for item in view.items:
             row = item_json(item, ledger)
-            if user_id:
-                part = amount_for(ledger, item, user_id)
+            if people:
+                part = amount_for(ledger, item, [u.id for u in people])
                 if part == ZERO:
                     continue
                 row["amount"] = money_str(part)
@@ -332,8 +361,10 @@ class Reports:
         totals = {"receive": ZERO, "pay": ZERO}
         for r in rows:
             totals[r.direction] += r.remaining
+        forecast = self._forecast_receivables(ledger, user_id)
         return {
             "user_id": user_id,
+            "forecast": forecast,
             "items": [
                 {
                     "counterparty_user_id": r.counterparty_user_id,
@@ -348,6 +379,33 @@ class Reports:
                     "status": r.status,
                     "overdue": r.overdue,
                     "settled_month_total": money_str(r.settled_month_total),
+                }
+                for r in rows
+            ],
+            "totals": {k: money_str(v) for k, v in totals.items()},
+        }
+
+    def _forecast_receivables(self, ledger: Ledger, user_id: str) -> dict[str, Any]:
+        """R14.15: expected debts from forecasts (subscriptions, recurring purchases,
+        installments) of shared cards/accounts, this month and the next 2 (R14.28); they are not
+        settled nor counted in the totals until the invoice/statement arrives."""
+        current = month_of(self.today)
+        months = [add_months(current, k) for k in range(0, 3)]
+        bal = balances(ledger, ledger.months(months), [], forecasts=True)
+        rows = receivables(bal, user_id, self.today)
+        totals = {"receive": ZERO, "pay": ZERO}
+        for r in rows:
+            totals[r.direction] += r.amount
+        return {
+            "items": [
+                {
+                    "counterparty_user_id": r.counterparty_user_id,
+                    "direction": r.direction,
+                    "card_id": r.card_id,
+                    "account_id": r.account_id,
+                    "invoice_month": r.invoice_month,
+                    "due_date": r.due_date.isoformat() if r.due_date else None,
+                    "amount": money_str(r.amount),
                 }
                 for r in rows
             ],
@@ -454,6 +512,112 @@ class Reports:
             ],
         }
 
+    def household(self, month: str) -> dict[str, Any]:
+        """R14.26 Contas da casa: each household bill of ``month`` — expected (price in force),
+        paid (entries linked to it for that month), due date and status. Bills are gastos
+        recorrentes marked "Conta da casa" (the occurrence date is the due date); subscriptions
+        marked as household (first version of the feature) are still listed."""
+        y, m = (int(x) for x in month.split("-"))
+        last = calendar.monthrange(y, m)[1]
+        by_rec: dict[str, list[Transaction]] = defaultdict(list)
+        by_sub: dict[str, list[Transaction]] = defaultdict(list)
+        for tx in self.repo.all("transactions"):
+            if tx.links.recurring_purchase_id and tx.links.recurring_month == month:
+                by_rec[tx.links.recurring_purchase_id].append(tx)
+            if (
+                tx.links.subscription_id
+                and (tx.links.subscription_month or tx.invoice_month) == month
+            ):
+                by_sub[tx.links.subscription_id].append(tx)
+        rows: list[dict[str, Any]] = []
+
+        def row(
+            source: str, item: Any, due: date | None, expected: Decimal, paid_txs: list[Any],
+            paused: bool,
+        ) -> None:  # fmt: skip
+            paid = sum((t.amount for t in paid_txs), ZERO)
+            if paid > ZERO:
+                status = "paga"
+            elif paused:
+                status = "desativada"
+            elif due is not None and due < self.today:
+                status = "atrasada"
+            else:
+                status = "pendente"
+            rows.append(
+                {
+                    "source": source,
+                    "id": item.id,
+                    "description": item.description,
+                    "category_id": item.category_id,
+                    "payment_method": item.payment_method.value,
+                    "card_id": item.card_id,
+                    "account_id": item.account_id,
+                    # R14.27: the split in force in that month
+                    "allocations": item.model_copy(
+                        update={"allocations": item.allocations_in(month)}
+                    ).model_dump(mode="json")["allocations"],
+                    "due_date": due.isoformat() if due else None,
+                    "expected": money_str(expected),
+                    "paid": money_str(paid),
+                    "status": status,
+                    "transaction_ids": [t.id for t in paid_txs],
+                }
+            )
+
+        month_end = date(y, m, last)
+        for rec in self.repo.all("recurring_purchases"):
+            if rec.group != "household" or not rec.active:
+                continue
+            if rec.paused_in(month):
+                row("recurring", rec, None, ZERO, by_rec[rec.id], True)
+                continue
+            dues = [d for d in occurrences(rec, month_end) if month_of(d) == month]
+            if not dues and not by_rec[rec.id]:
+                continue  # not due this month (e.g. every 2 months)
+            expected = rec.amount_in(month) * max(len(dues), 1)
+            row("recurring", rec, dues[0] if dues else None, expected, by_rec[rec.id], False)
+        for sub in self.repo.all("subscriptions"):
+            if sub.group != "household":
+                continue
+            if month < sub.start_month or (sub.end_month and month > sub.end_month):
+                continue
+            if sub.period == "annual" and m != sub.month_of_year:
+                continue
+            paused = sub.paused_in(month)
+            expected = ZERO if paused else sub.amount_in(month)
+            due = date(y, m, min(sub.due_day, last)) if sub.due_day else None
+            row("subscription", sub, due, expected, by_sub[sub.id], paused)
+        rows.sort(key=lambda r: (r["due_date"] or "9999", r["description"]))
+        totals = {
+            "expected": sum((Decimal(r["expected"]) for r in rows), ZERO),
+            "paid": sum((Decimal(r["paid"]) for r in rows), ZERO),
+        }
+        return {
+            "month": month,
+            "items": rows,
+            "totals": {k: money_str(v) for k, v in totals.items()},
+        }
+
+    def plan_progress(self) -> dict[str, dict[str, Any]]:
+        """R14.19: status, charges and amount still to come, and the next installment."""
+        ledger = self.ledger()
+        out: dict[str, dict[str, Any]] = {}
+        for plan in self.repo.all("installment_plans"):
+            h = ledger.card_h(plan.card_id)
+            nxt = next((c for c in schedule(plan) if c.month >= h), None)
+            out[plan.id] = {
+                "status": plan_status(plan, h),
+                "remaining": remaining_count(plan, h),
+                "remaining_amount": money_str(remaining_amount(plan, h)),
+                "next_n": nxt.n if nxt else None,
+                "next_month": nxt.month if nxt else None,
+                "next_amount": money_str(nxt.amount) if nxt else None,
+                # R14.21: the monthly installment (the last one; the 1st may carry the cents)
+                "installment_amount": money_str(installment_amounts(plan)[-1]),
+            }
+        return out
+
     def plan_statuses(self) -> dict[str, str]:
         ledger = self.ledger()
         out: dict[str, str] = {}
@@ -468,8 +632,10 @@ class Reports:
         count = sum(len(v) for v in uncategorized.values())
         if count:
             out.append({"type": "uncategorized", "count": count, "items": uncategorized})
+        paid = self.ledger().recurring_paid
         for rec in self.repo.all("recurring_purchases"):
-            late = overdue(rec, self.today)
+            months = {m for rid, m in paid if rid == rec.id}
+            late = overdue(rec, self.today, months)
             if late is not None:
                 out.append(
                     {

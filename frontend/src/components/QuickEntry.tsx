@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { T } from "../i18n/i18n";
 import { todayIso } from "../lib/dates";
 import { DateField } from "./ui/DateField";
 import { useDebouncedValue, useDisclosure, useHotkeys } from "@mantine/hooks";
@@ -28,9 +29,11 @@ import type {
   Transaction,
 } from "../api/types";
 import { METHOD_LABELS, parseMoneyInput } from "../lib/format";
+import { useDefaultSplit } from "./defaultSplit";
 import { AllocationPicker, allocationValid } from "./AllocationPicker";
 import { CategorySelect } from "./CategorySelect";
 import { errorText } from "./QueryState";
+import { formatMonth, useMonth } from "../hooks/month";
 
 export const METHOD_STORAGE_KEY = "expense-tracker.quick-entry.method";
 export const ownerStorageKey = (method: PaymentMethod) =>
@@ -115,6 +118,11 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState("");
   const [method, setMethod] = useState<PaymentMethod>(storedMethod);
   const [ownerId, setOwnerId] = useState<string | null>(null);
+  const isCreditMethod = method === "credit";
+  const defaultHint = useDefaultSplit(
+    isCreditMethod ? ownerId : null,
+    isCreditMethod ? null : ownerId,
+  );
   const [date, setDate] = useState(todayIso);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [categoryTouched, setCategoryTouched] = useState(false);
@@ -169,6 +177,7 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
     if (!allocationTouched) setAllocations(data.allocations);
   }, [suggestion.data, categoryTouched, allocationTouched]);
 
+  const { selected, setSelected } = useMonth();
   const save = useAction<Record<string, unknown>, ManualEntryResult>(
     "post",
     () => "/api/transactions",
@@ -211,9 +220,17 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
         window.localStorage.setItem(METHOD_STORAGE_KEY, method);
         if (ownerId)
           window.localStorage.setItem(ownerStorageKey(method), ownerId);
+        // R14.17: an entry in another invoice month (future date, or after the card closing)
+        // is not in the month on screen; go to it so it does not look like it vanished.
+        const landed =
+          result.transaction?.invoice_month ?? result.plan?.first_invoice_month;
+        const moved = landed !== undefined && landed !== selected;
+        if (moved) setSelected(landed);
         notifications.show({
           title: result.plan ? "Parcelamento criado" : "Lançamento salvo",
-          message: reconciliationMessage(result),
+          message: moved
+            ? `${reconciliationMessage(result)} Entrou na fatura/mês de ${formatMonth(landed)}: mostrando esse mês.`
+            : reconciliationMessage(result),
           color:
             result.reconciliation?.status === "not_in_document"
               ? "yellow"
@@ -302,6 +319,7 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
           }
         />
         <AllocationPicker
+          defaultHint={defaultHint}
           value={allocations}
           onChange={(v) => {
             setAllocationTouched(true);
@@ -367,7 +385,9 @@ export function QuickEntryButton() {
           </Kbd>
         }
       >
-        <span className="et-quick__text">Lançar</span>
+        <span className="et-quick__text">
+          <T>Lançar</T>
+        </span>
       </Button>
       <Modal
         opened={opened}

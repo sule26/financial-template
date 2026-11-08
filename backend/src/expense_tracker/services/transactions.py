@@ -29,7 +29,7 @@ from expense_tracker.domain.models import (
     Transaction,
 )
 from expense_tracker.domain.money import Money
-from expense_tracker.domain.months import month_of
+from expense_tracker.domain.months import Month, month_of
 from expense_tracker.domain.normalize import normalize_description
 from expense_tracker.services.catalog import Catalog
 from expense_tracker.services.errors import Invalid, NotFound, new_id
@@ -54,6 +54,11 @@ class ManualEntry(BaseModel):
     kind: Kind = Kind.EXPENSE
     note: str | None = None
     recurring_purchase_id: str | None = None
+    # R14.26: for a conta da casa, the bill month (occurrence month) this entry pays
+    recurring_month: Month | None = None
+    # R14.26: payment of a conta da casa / subscription; the bill month (default: invoice month)
+    subscription_id: str | None = None
+    subscription_month: Month | None = None
 
 
 class TransactionPatch(BaseModel):
@@ -67,6 +72,10 @@ class TransactionPatch(BaseModel):
     amount: Money | None = None
     purchase_date: date | None = None
     provisional: bool | None = None
+    # R14.23: a manual entry may move to another payment method / card / account
+    payment_method: PaymentMethod | None = None
+    card_id: str | None = None
+    account_id: str | None = None
 
 
 @dataclass
@@ -150,6 +159,25 @@ class Transactions:
 
     # ------------------------------------------------------------ manual create (R10.1)
 
+    def _check_target(
+        self, method: PaymentMethod, card_id: str | None, account_id: str | None
+    ) -> None:
+        """Same rules as a new manual entry: card for credit, an account of the right type."""
+        self._ownership(self._ledger(), method, card_id, account_id)
+        if method is PaymentMethod.CREDIT:
+            return
+        acc = self.repo.get("accounts", account_id or "")
+        assert acc is not None  # checked by _ownership
+        allowed = {
+            "checking": {"debit", "pix", "transfer", "boleto"},
+            "benefit": {"benefit"},
+            "cash": {"cash"},
+        }[acc.type]
+        if method.value not in allowed:
+            raise Invalid(
+                "method_not_allowed", f"{method.value} not allowed on a {acc.type} account"
+            )
+
     def create_manual(self, entry: ManualEntry) -> dict[str, Any]:
         cat = self.catalog
         if entry.kind.value in CATEGORY_KINDS and not entry.category_id:
@@ -157,6 +185,7 @@ class Transactions:
         cat._need("categories", entry.category_id, "category_id")
         cat.check_allocation(entry.allocations)
         cat._need("recurring_purchases", entry.recurring_purchase_id, "recurring_purchase_id")
+        cat._need("subscriptions", entry.subscription_id, "subscription_id")
         ledger = self._ledger()
         self._ownership(ledger, entry.payment_method, entry.card_id, entry.account_id)
         if entry.payment_method is PaymentMethod.CREDIT:
@@ -181,6 +210,16 @@ class Transactions:
             account_id = entry.account_id
             month = month_of(entry.purchase_date)
         if entry.installments > 1:
+            rec_bill = (
+                self.repo.get("recurring_purchases", entry.recurring_purchase_id)
+                if entry.recurring_purchase_id
+                else None
+            )
+            if entry.subscription_id or (rec_bill is not None and rec_bill.group == "household"):
+                raise Invalid(
+                    "installments_not_allowed",
+                    "a bill/subscription payment is a single entry, not installments",
+                )
             if entry.payment_method is not PaymentMethod.CREDIT:
                 raise Invalid("installments_credit_only", "installments need a credit card")
             plan = InstallmentPlan(
@@ -218,18 +257,29 @@ class Transactions:
         except ValidationError as exc:
             raise Invalid("invalid_transaction", str(exc)) from exc
         if entry.recurring_purchase_id:
+            rec = self.repo.get("recurring_purchases", entry.recurring_purchase_id)
+            assert rec is not None
+            link: dict[str, Any] = {"recurring_purchase_id": entry.recurring_purchase_id}
+            if rec.group == "household":
+                # R14.26: a bill keeps its due-date schedule; the payment marks its month paid
+                link["recurring_month"] = entry.recurring_month or month_of(entry.purchase_date)
+            else:
+                from expense_tracker.domain.recurrence import reanchor
+
+                self.repo.put("recurring_purchases", reanchor(rec, entry.purchase_date))
+            tx = tx.model_copy(update={"links": tx.links.model_copy(update=link)})
+        if entry.subscription_id:
+            # R14.26: this entry pays that subscription's month (its forecast is not repeated)
             tx = tx.model_copy(
                 update={
                     "links": tx.links.model_copy(
-                        update={"recurring_purchase_id": entry.recurring_purchase_id}
+                        update={
+                            "subscription_id": entry.subscription_id,
+                            "subscription_month": entry.subscription_month or month,
+                        }
                     )
                 }
             )
-            rec = self.repo.get("recurring_purchases", entry.recurring_purchase_id)
-            assert rec is not None
-            from expense_tracker.domain.recurrence import reanchor
-
-            self.repo.put("recurring_purchases", reanchor(rec, entry.purchase_date))
         self.repo.put("transactions", tx)
         reconciliation = self.after_manual_change(tx) if self.after_manual_change else None
         return {"transaction": tx.model_dump(mode="json"), "reconciliation": reconciliation}
@@ -255,7 +305,15 @@ class Transactions:
             raise Invalid("category_required", "choose a category before saving (R1.12)")
         if tx.source.type == "import":
             # Imported values come from the bank; only my edits are allowed (kept as annotation).
-            forbidden = {"description", "amount", "purchase_date", "provisional"} & changes.keys()
+            forbidden = {
+                "description",
+                "amount",
+                "purchase_date",
+                "provisional",
+                "payment_method",
+                "card_id",
+                "account_id",
+            } & changes.keys()
             if forbidden:
                 raise Invalid(
                     "imported_readonly",
@@ -268,13 +326,28 @@ class Transactions:
         if "allocations" in changes:
             update["allocations"] = patch.allocations
             update["allocation_origin"] = "manual"
-        if "purchase_date" in changes and patch.purchase_date is not None:
-            update["purchase_date"] = patch.purchase_date
+        moving = {"payment_method", "card_id", "account_id"} & changes.keys()
+        if moving:
+            method = changes.get("payment_method") or tx.payment_method
+            card_id = changes.get("card_id", tx.card_id)
+            account_id = changes.get("account_id", tx.account_id)
+            method = PaymentMethod(method)
+            # credit -> only the card; any other method -> only the account
+            card_id, account_id = (
+                (card_id, None) if method is PaymentMethod.CREDIT else (None, account_id)
+            )
+            self._check_target(method, card_id, account_id)
+            update.update(payment_method=method, card_id=card_id, account_id=account_id)
+            if "provisional" not in changes:
+                # same rule as a new entry: only cash is final right away
+                update["provisional"] = method is not PaymentMethod.CASH
+        if moving or ("purchase_date" in changes and patch.purchase_date is not None):
+            when = patch.purchase_date or tx.purchase_date
+            update["purchase_date"] = when
+            card = update.get("card_id", tx.card_id)
             ledger = self._ledger()
             update["invoice_month"] = (
-                ledger.month_for_card_date(tx.card_id, patch.purchase_date)
-                if tx.card_id
-                else month_of(patch.purchase_date)
+                ledger.month_for_card_date(card, when) if card else month_of(when)
             )
         new = tx.model_copy(update=update)
         new = Transaction.model_validate(new.model_dump(mode="json"))

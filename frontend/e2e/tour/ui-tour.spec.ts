@@ -76,6 +76,11 @@ async function seed(api: APIRequestContext) {
     type: "checking",
     owners: { split_id: "split_casal" },
     responsible_user_id: "eu",
+    // R14.1: Eu and Ana pay the Inter bill 60/40
+    responsibles: [
+      { user_id: "eu", pct: "60.00" },
+      { user_id: "ana", pct: "40.00" },
+    ],
   });
   await post("/api/accounts", {
     id: "acc_vr",
@@ -126,6 +131,42 @@ async function seed(api: APIRequestContext) {
     card_id: "card_nubank",
     category_id: cat("Entretenimento"),
     allocations: { split_id: "split_casal" },
+    price_history: [{ from_month: month(-2), amount: "59.90" }],
+    pauses: [{ from_month: month(-4), until_month: month(-4) }],
+  });
+  // R14.26: contas da casa are gastos recorrentes (occurrence = due date), one paid this month.
+  // R14.27: from next month LUZ is split with the partner.
+  for (const [id, description, amount, dueDay] of [
+    ["rec_luz", "LUZ", "180.00", "10"],
+    ["rec_agua", "AGUA", "90.00", "25"],
+    ["rec_aluguel", "ALUGUEL", "2500.00", "05"],
+  ] as const) {
+    await post("/api/recurring-purchases", {
+      id,
+      description,
+      estimated_amount: amount,
+      every: { value: 1, unit: "months" },
+      last_date: `${month(-1)}-${dueDay}`,
+      payment_method: "boleto",
+      account_id: "acc_inter",
+      category_id: cat(id === "rec_aluguel" ? "Aluguel" : "Casa"),
+      allocations: [{ user_id: "eu", pct: "100.00" }],
+      allocation_history:
+        id === "rec_luz"
+          ? [{ from_month: month(1), allocations: { split_id: "split_casal" } }]
+          : [],
+      group: "household",
+    });
+  }
+  await post("/api/transactions", {
+    purchase_date: day(-2),
+    amount: "2500.00",
+    description: "ALUGUEL",
+    category_id: cat("Aluguel"),
+    payment_method: "boleto",
+    account_id: "acc_inter",
+    recurring_purchase_id: "rec_aluguel",
+    recurring_month: month(0),
   });
   await post("/api/installment-plans", {
     id: "plan_geladeira",
@@ -219,6 +260,7 @@ const PAGES: [string, string][] = [
   ["/", "resumo"],
   ["/projecao", "projecao"],
   ["/lancamentos", "lancamentos"],
+  ["/contas-da-casa", "contas-da-casa"],
   ["/revisao", "revisao"],
   ["/a-receber", "a-receber"],
   ["/investimentos", "investimentos"],
@@ -292,6 +334,13 @@ test("r14_7 visual tour of every screen", async ({ page, request }) => {
       await shot(page, `${scheme}-cadastros-${tab}`);
     }
   }
+
+  // R14.18: another accent recolours the logo coin and the month banknote.
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("expense-tracker-accent", "ruby"));
+  await page.goto("/");
+  await shot(page, "light-resumo-ruby");
+  await page.evaluate(() => localStorage.removeItem("expense-tracker-accent"));
 
   // Detail views the operator opens most.
   await page.goto("/");

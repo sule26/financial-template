@@ -239,6 +239,45 @@ describe("TransactionsPage — entries", () => {
     );
   });
 
+  it("r14_23 a manual entry can move from the card to PIX on an account", async () => {
+    const { calls } = mockApi({
+      ...CATALOG,
+      "GET /api/transactions": TXS,
+      "PATCH /api/transactions/tx2": TXS[1],
+    });
+    const user = userEvent.setup();
+    renderPage(<TransactionsPage />, "/lancamentos");
+    await user.click(
+      await screen.findByRole("button", { name: "Editar Padaria" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Editar lançamento",
+    });
+    await user.click(
+      within(dialog).getByRole("textbox", { name: /Categoria/ }),
+    );
+    await user.click(await screen.findByRole("option", { name: "Lazer" }));
+    await user.selectOptions(
+      within(dialog).getByLabelText("Meio de pagamento"),
+      "pix",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Salvar" }));
+    expect(
+      await within(dialog).findByText("Escolha a conta"),
+    ).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText(/^Conta/), "acc_x");
+    await user.click(within(dialog).getByRole("button", { name: "Salvar" }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.path === "/api/transactions/tx2")?.body,
+      ).toMatchObject({
+        payment_method: "pix",
+        card_id: null,
+        account_id: "acc_x",
+      }),
+    );
+  });
+
   it("deletes only manual entries", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { calls } = mockApi({
@@ -281,7 +320,7 @@ describe("TransactionsPage — plans", () => {
     "GET /api/installment-plans": plans,
     "GET /api/installment-plans-status": {
       plan1: "em andamento",
-      plan2: "quase acabando",
+      plan2: "terminando",
     },
     "POST /api/installment-plans/plan1/anticipate": plans[0],
     "POST /api/installment-plans/plan1/cancel": plans[0],
@@ -299,7 +338,7 @@ describe("TransactionsPage — plans", () => {
     renderPage(<TransactionsPage />, "/lancamentos?tab=parcelamentos");
     expect(await screen.findByText("TV")).toBeInTheDocument();
     expect(await screen.findByText("em andamento")).toBeInTheDocument();
-    expect(screen.getByText("quase acabando")).toBeInTheDocument();
+    expect(screen.getByText("terminando")).toBeInTheDocument();
     expect(screen.getByText("origem removida")).toBeInTheDocument();
   });
 
@@ -352,7 +391,12 @@ describe("TransactionsPage — plans", () => {
     const user = userEvent.setup();
     renderPage(<TransactionsPage />, "/lancamentos?tab=parcelamentos");
     await user.click(
-      await screen.findByRole("button", { name: "Cancelar TV" }),
+      await (async () => {
+        await user.click(
+          await screen.findByRole("button", { name: "Mais ações de TV" }),
+        );
+        return screen.findByRole("menuitem", { name: "Cancelar TV" });
+      })(),
     );
     let dialog = await screen.findByRole("dialog", {
       name: "Cancelar parcelamento",
@@ -374,7 +418,14 @@ describe("TransactionsPage — plans", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     await user.click(
-      screen.getByRole("button", { name: "Antecipada no banco: TV" }),
+      await (async () => {
+        await user.click(
+          screen.getByRole("button", { name: "Mais ações de TV" }),
+        );
+        return screen.findByRole("menuitem", {
+          name: "Antecipada no banco: TV",
+        });
+      })(),
     );
     dialog = await screen.findByRole("dialog", { name: "Antecipada no banco" });
     await user.type(
@@ -469,7 +520,7 @@ describe("TransactionsPage — recurring", () => {
 
     await user.click(screen.getByRole("button", { name: "Adiar Ração" }));
     const dialog = await screen.findByRole("dialog", {
-      name: "Adiar compra recorrente",
+      name: "Adiar gasto recorrente",
     });
     const input = within(dialog).getByLabelText(/Nova data prevista/);
     await pickDate(user, input, "2026-10-25");
@@ -481,15 +532,34 @@ describe("TransactionsPage — recurring", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Encerrar Ração" }));
+    // R14.10: "Desativar" (reversible), no confirmation needed
+    await user.click(screen.getByRole("button", { name: "Desativar Ração" }));
     await waitFor(() => expect(actions()[2]?.body).toEqual({ action: "end" }));
   });
 
-  it("shows inactive purchases without actions and the empty state", async () => {
-    mockApi(routes([rec({ active: false })]));
+  it("r14_10 an inactive purchase only offers Ativar", async () => {
+    const { calls } = mockApi(routes([rec({ active: false })]));
+    const user = userEvent.setup();
     renderPage(<TransactionsPage />, "/lancamentos?tab=recorrentes");
-    expect(await screen.findByText("encerrada")).toBeInTheDocument();
+    expect(await screen.findByText("desativada")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adiar Ração" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Ativar Ração" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+        action: "resume",
+      }),
+    );
+  });
+
+  it("r14_11 a purchase paused this month shows as desativada", async () => {
+    mockApi(
+      routes([rec({ pauses: [{ from_month: "2026-01", until_month: null }] })]),
+    );
+    renderPage(<TransactionsPage />, "/lancamentos?tab=recorrentes");
+    expect(await screen.findByText("desativada")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ativar Ração" }),
+    ).toBeInTheDocument();
   });
 
   it("switches tabs through the URL", async () => {
@@ -497,7 +567,7 @@ describe("TransactionsPage — recurring", () => {
     const user = userEvent.setup();
     renderPage(<TransactionsPage />, "/lancamentos?tab=recorrentes");
     expect(
-      await screen.findByText("Nenhuma compra recorrente."),
+      await screen.findByText("Nenhum gasto recorrente."),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Lançamentos" }));
     expect(

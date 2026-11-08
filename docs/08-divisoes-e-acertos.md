@@ -84,9 +84,20 @@ O seletor de divisão na UI oferece: os padrões cadastrados, "só eu", "100% pa
 | Adicional do meu cartão usado pelos pais | pais 100% (no adicional) | eu (herdado do principal) | Linhas da seção do adicional são dos pais |
 
 - Donos: 1 ou mais, lista fixa somando 100,00 ou padrão de divisão (R6.7, R6.10).
-- Responsável: exatamente 1; pode ser um dos donos ou não (R6.8).
+- Responsável: o **responsável principal** é exatamente 1 e pode ser um dos donos ou não (R6.8).
+- Vários responsáveis (R14.1): `responsibles` (lista fixa somando 100,00 ou padrão de divisão) diz
+  quem paga o banco e quanto. A parte de cada pessoa num lançamento é devida a **cada** responsável
+  na proporção dele; a fração que cabe ao próprio responsável não vira dívida. Ex.: compra de 100
+  dividida 50/50 entre eu e Ana, paga 60/40 por eu e Ana → Ana me deve 30 (50 × 60%) e eu devo 20 a
+  Ana (50 × 40%): líquido, Ana me deve 10 (pagou 40 e consumiu 50). Centavos: resíduo para o
+  principal se ele paga, senão para o maior percentual. "Repassar para" (R13.11/R13.14) vale para
+  cada responsável. `responsibles = null` = só o principal paga (comportamento de R6.8).
+- O que "Padrão" significa (R14.16): na UI, a divisão "Padrão" mostra os donos efetivos do
+  cartão/conta ("Padrão = donos do cartão Inter — Eu 100%"); uma regra que casa ainda tem
+  precedência.
 - Herança (R6.9, R1.10): cartão adicional ← cartão principal ← conta vinculada. Cada campo
-  (`owners`, `responsible_user_id`) é herdado separadamente quando `null`.
+  (`owners`, `responsible_user_id`) é herdado separadamente quando `null`; `responsibles` vem
+  **junto** com o `responsible_user_id` do mesmo nível (nunca misturado entre níveis).
 
 ```
 resolve(card):
@@ -204,8 +215,18 @@ No exemplo: pais devem 80 à Ana **e** Ana deve 80 a mim. Se o coletor for o pr�
 (contraparte, cartão principal ou conta, `invoice_month`) — 2 cartões no mesmo mês = 2 recebimentos;
 cartão adicional entra no cartão principal. Dentro do grupo créditos e débitos se compensam; `direction`
 é `receive` ou `pay` e `amount` é positivo. Data limite (`due_date`) = vencimento da fatura do cartão:
-o do documento ativo daquele mês, senão o previsto pelo `billing_history`; contas não têm vencimento
-(`null`, vão para o fim). Ordem: `due_date`, mês, contraparte.
+o do documento ativo daquele mês, senão o previsto pelo `billing_history`. Conta (PIX, débito, boleto)
+usa o vencimento da fatura do **cartão principal vinculado** à conta em que uma compra no cartão no mesmo
+dia cairia (R14.22; ex.: fechamento 3, vencimento 10 → PIX em 05/10 ou 20/10 vence em 10/11; vários
+cartões: o primeiro por id); com vários lançamentos no mesmo recebimento vale o prazo mais tarde; conta
+sem cartão vinculado fica sem data limite (`null`, vai para o fim).
+Ordem: `due_date`, mês, contraparte.
+
+**Previsto** (R14.15): `forecast.items` traz, no mesmo formato (sem `settled`/`status`), o que as
+**previsões** (assinaturas, compras recorrentes, parcelas planejadas) de cartões/contas divididos vão
+gerar de dívida, no mês atual e nos 2 próximos (a tela agrupa por mês e por pessoa); `forecast.totals` soma por direção.
+Não entra em `items`/`totals`, não pode ser marcado como recebido e some quando a fatura/extrato
+do mês chega (aí o lançamento real vira recebimento).
 
 Cada item traz também (R13.16) `settled` = soma dos acertos **vinculados** ao item (mesmo par, na
 direção do item — quem paga → quem recebe —, mesmo cartão principal/conta e `invoice_month`),

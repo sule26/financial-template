@@ -37,6 +37,33 @@ DEFAULT_CATEGORIES = [
     "Educação", "Entretenimento", "Família", "Lazer", "Moradia", "Outros", "Pessoal", "Presente",
     "Saúde", "Trabalho", "Transporte",
 ]  # fmt: skip
+# R14.24: what goes in each default category (shown next to the name when choosing one).
+CATEGORY_HINTS: dict[str, str] = {
+    "Alimentação": "Mercado, feira, padaria, açougue — comida para casa",
+    "Aluguel": "Aluguel do imóvel e taxas do contrato",
+    "Animais": "Ração, veterinário, banho e tosa, remédios do pet",
+    "Banco": "Tarifas, anuidade, juros, IOF, encargos do cartão",
+    "Casa": "Contas da casa: luz, água, gás, internet; móveis, eletrodomésticos, manutenção",
+    "Compras": "Roupas, eletrônicos e compras em lojas que não são de outra categoria",
+    "Delivery": "Pedidos por app (iFood, Rappi) e comida pronta entregue",
+    "Digital": "Streaming, apps, jogos, assinaturas e serviços online",
+    "Educação": "Escola, faculdade, cursos, livros e material",
+    "Entretenimento": "Cinema, shows, eventos, ingressos",
+    "Família": "Gastos com filhos, pais e parentes (mesada, ajuda, escola dos filhos)",
+    "Lazer": "Restaurantes, bares, passeios, viagens",
+    "Moradia": "Condomínio, IPTU, seguro residencial, financiamento do imóvel",
+    "Outros": "O que não se encaixa em nenhuma outra",
+    "Pessoal": "Cuidados pessoais: cabelo, cosméticos, academia",
+    "Presente": "Presentes e doações",
+    "Saúde": "Farmácia, consultas, exames, plano de saúde, dentista",
+    "Trabalho": (
+        "Gastos do trabalho (material, deslocamento a serviço) — muitas vezes reembolsáveis"
+    ),
+    "Transporte": (
+        "Combustível, app de corrida, ônibus/metrô, estacionamento, pedágio, " "manutenção do carro"
+    ),
+}
+
 PALETTE = ["#2F9E44", "#E8590C", "#7048E8", "#1971C2", "#C2255C", "#0C8599", "#F08C00",
            "#5C940D", "#9C36B5", "#3B5BDB", "#D9480F", "#099268", "#862E9C", "#868E96",
            "#1864AB", "#E64980", "#C92A2A", "#495057", "#0B7285"]  # fmt: skip
@@ -106,6 +133,9 @@ class Catalog:
         check: Callable[[Any], None] | None = getattr(self, f"_check_{name}", None)
         if check is not None:
             check(item)
+        # R14.27: every split of a split history must exist too
+        for entry in getattr(item, "allocation_history", None) or []:
+            self.check_allocation(entry.allocations, "allocation_history.allocations")
 
     def _check_users(self, item: User) -> None:
         collector = item.collector_user_id
@@ -262,7 +292,17 @@ class Catalog:
         return item
 
     def update(self, name: str, key: str, data: dict[str, Any]) -> Any:
-        self.get(name, key)
+        old = self.get(name, key)
+        if name == "installment_plans" and old.origin.type == "import":
+            # R14.20: a plan read from an invoice follows the bank; only my classification changes
+            fixed = ("card_id", "total_amount", "total_installments", "first_invoice_month")
+            new = MODELS[name].model_validate({**data, "id": key})
+            changed = [f for f in fixed if getattr(new, f) != getattr(old, f)]
+            if changed:
+                raise Invalid(
+                    "imported_readonly",
+                    f"imported plan fields are read-only: {', '.join(changed)}",
+                )
         payload = dict(data)
         payload["id"] = key
         item = self._prepare(name, MODELS[name].model_validate(payload))
@@ -304,6 +344,9 @@ class Catalog:
                         refs.append(f"{coll}/{ident}")
                 for attr in ("owners", "allocations", "responsibles"):
                     if alloc_uses(getattr(it, attr, None)):
+                        refs.append(f"{coll}/{ident}")
+                for entry in getattr(it, "allocation_history", None) or []:
+                    if alloc_uses(entry.allocations):
                         refs.append(f"{coll}/{ident}")
 
         scan(
@@ -409,14 +452,30 @@ class Catalog:
         return {"deleted": key, "uncategorized": affected}
 
     def seed_defaults(self) -> list[str]:
-        """First run only (no categories file yet): create the standard category list."""
+        """First run only (no categories file yet): create the standard category list.
+
+        On later runs, a standard category (by name) without description gets the standard
+        one (R14.24), so existing installs see what goes in each category too.
+        """
         if self.repo.path("categories").exists() or self.repo.all("categories"):
+            for cat in self.repo.all("categories"):
+                hint = CATEGORY_HINTS.get(cat.name.strip())
+                if hint and not cat.description:
+                    self.repo.put("categories", cat.model_copy(update={"description": hint}))
             return []
         created = []
         for i, name in enumerate(DEFAULT_CATEGORIES):
             color = PALETTE[i % len(PALETTE)]
             cid = "cat_" + folder_name(name).replace(" ", "_")
-            self.repo.put("categories", Category(id=strip_accents(cid), name=name, color=color))
+            self.repo.put(
+                "categories",
+                Category(
+                    id=strip_accents(cid),
+                    name=name,
+                    color=color,
+                    description=CATEGORY_HINTS.get(name),
+                ),
+            )
             created.append(name)
         return created
 

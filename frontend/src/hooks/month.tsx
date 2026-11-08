@@ -1,3 +1,4 @@
+import { currentLang } from "../i18n/i18n";
 import {
   createContext,
   useCallback,
@@ -35,9 +36,27 @@ export const MONTH_NAMES = [
   "dez",
 ];
 
+const MONTH_NAMES_EN = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
 export function formatMonth(month: Month): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
-  return `${MONTH_NAMES[m - 1]}/${y}`;
+  // R14.13: "out/2026" in Portuguese, "Oct 2026" in English
+  return currentLang() === "en"
+    ? `${MONTH_NAMES_EN[m - 1]} ${y}`
+    : `${MONTH_NAMES[m - 1]}/${y}`;
 }
 
 interface MonthContextValue {

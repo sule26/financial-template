@@ -19,6 +19,7 @@ import {
   PageHeader,
   StatusBadge,
 } from "../../components/ui";
+import { readDefaultPeople } from "../../hooks/defaultPeople";
 import { formatMonth } from "../../hooks/month";
 import { formatDate, formatMoney, sumMoney } from "../../lib/format";
 import {
@@ -28,7 +29,8 @@ import {
   chartTooltip,
   Panel,
   PendingSwitch,
-  PersonSelect,
+  PeopleSelect,
+  peopleName,
   plotValue,
   StateBadge,
   useCategoryInfo,
@@ -72,7 +74,9 @@ function unionKeys(rows: Record<string, unknown>[]): string[] {
 }
 
 export function ProjectionPage() {
-  const [userId, setUserId] = useState<string | null>(null);
+  // R14.25: starts with the default people of Configurações; several = their parts summed
+  const [people, setPeople] = useState<string[]>(readDefaultPeople);
+  const userId = people.length ? people.join(",") : null;
   const [pending, setPending] = useState(false);
   const [openMonth, setOpenMonth] = useState<MonthStr | null>(null);
   const path = `/api/reports/projection${buildQuery({
@@ -81,7 +85,7 @@ export function ProjectionPage() {
   })}`;
   const projection = useGet<Projection>(["reports", "projection", path], path);
   const names = useNames();
-  const personName = userId ? (names.users[userId] ?? userId) : null;
+  const personName = peopleName(people, names.users);
 
   return (
     <Stack gap="xl">
@@ -91,7 +95,7 @@ export function ProjectionPage() {
         icon={<IconChartAreaLine size={22} stroke={1.7} />}
         subtitle="Seus cartões nos próximos 12 meses. Cada cartão usa a fatura real quando existe; senão, a projeção (parcelas, assinaturas, recorrentes e lançamentos previstos). Débito, PIX e dinheiro ficam no Resumo."
       >
-        <PersonSelect value={userId} onChange={setUserId} />
+        <PeopleSelect value={people} onChange={setPeople} />
         <PendingSwitch checked={pending} onChange={setPending} />
       </PageHeader>
       <QueryState

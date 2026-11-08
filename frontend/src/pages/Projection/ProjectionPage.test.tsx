@@ -132,7 +132,7 @@ describe("ProjectionPage", () => {
     await userEvent.click(
       screen.getByRole("switch", { name: "Incluir não confirmados" }),
     );
-    await userEvent.click(screen.getByRole("textbox", { name: "Pessoa" }));
+    await userEvent.click(screen.getByRole("textbox", { name: "Pessoas" }));
     await userEvent.click(await screen.findByRole("option", { name: "Eu" }));
     await waitFor(() =>
       expect(paths()).toContain(
@@ -166,7 +166,7 @@ describe("ProjectionPage", () => {
     });
     expect(await within(table).findByText("Cartão X")).toBeInTheDocument();
     expect(within(table).getByText("Total dos cartões")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("textbox", { name: "Pessoa" }));
+    await userEvent.click(screen.getByRole("textbox", { name: "Pessoas" }));
     await userEvent.click(await screen.findByRole("option", { name: "Ana" }));
     await waitFor(() =>
       expect(calls.map((c) => c.path)).toContain(
@@ -228,7 +228,7 @@ describe("ProjectionPage", () => {
     });
     renderPage(<ProjectionPage />);
     await userEvent.click(
-      await screen.findByRole("textbox", { name: "Pessoa" }),
+      await screen.findByRole("textbox", { name: "Pessoas" }),
     );
     await userEvent.click(await screen.findByRole("option", { name: "Ana" }));
     await userEvent.click(

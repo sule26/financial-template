@@ -1,4 +1,5 @@
 import { Badge, type BadgeProps, type MantineColor } from "@mantine/core";
+import { TNode } from "../../i18n/i18n";
 import type { ReactNode } from "react";
 
 export type StatusTone =
@@ -76,7 +77,7 @@ export function StatusBadge({
       }
       tt="none"
     >
-      {children}
+      <TNode>{children}</TNode>
     </Badge>
   );
 }

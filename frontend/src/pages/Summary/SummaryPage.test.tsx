@@ -167,7 +167,7 @@ describe("SummaryPage", () => {
       ),
     );
 
-    await userEvent.click(screen.getByRole("textbox", { name: "Pessoa" }));
+    await userEvent.click(screen.getByRole("textbox", { name: "Pessoas" }));
     await userEvent.click(await screen.findByRole("option", { name: "Ana" }));
     await waitFor(() =>
       expect(summaryCalls()).toContain(

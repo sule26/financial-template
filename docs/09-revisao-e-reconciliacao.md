@@ -67,7 +67,14 @@ recorrente não ocorrida (R12.4). Uma linha só recebe a primeira sugestão que 
 Categoria é obrigatória para confirmar (R1.11): linhas sem categoria sugerida ficam destacadas e o
 "confirmar arquivo" lista quantas faltam.
 
-### Por que não há dupla contagem
+### Fatura de cartão: só gastos (R14.8)
+
+Na Revisão de uma fatura de cartão entram só linhas de gasto, estorno, tarifa/juros e investimento
+(previdência no cartão, linha 15). A linha "PAGAMENTO RECEBIDO" (o pagamento visto pelo lado do cartão)
+**não** é encenada: o pagamento já aparece no extrato e é casado lá (linha 12). O tipo de uma linha de
+fatura só pode ser trocado entre esses quatro (`422 invalid_kind` para os outros).
+
+## Por que não há dupla contagem
 
 | Risco | Proteção |
 |-------|----------|

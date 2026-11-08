@@ -109,8 +109,19 @@ export function BrandMark({ size = 30 }: { size?: number }) {
       aria-hidden="true"
       focusable="false"
     >
-      <circle cx="16" cy="16" r="15.5" fill="var(--et-note-from)" />
-      <path d={d} fill="none" stroke="var(--et-note-brass)" strokeWidth="0.9" />
+      {/* R14.18: CSS (not SVG attributes) so the accent variables always resolve */}
+      <circle
+        cx="16"
+        cy="16"
+        r="15.5"
+        style={{ fill: "var(--et-note-from)" }}
+      />
+      <path
+        d={d}
+        fill="none"
+        style={{ stroke: "var(--et-note-brass)" }}
+        strokeWidth="0.9"
+      />
     </svg>
   );
 }

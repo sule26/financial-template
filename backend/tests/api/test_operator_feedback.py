@@ -529,3 +529,33 @@ def test_r1_13_responsible_person_sees_the_card_state(api: Api) -> None:
     )
     proj = api.get("/api/reports/projection", params={"user_id": "usr_a"}).json()
     assert any("card_kid" in m["states"] for m in proj["months"])
+
+
+def test_r14_24_default_categories_explain_what_goes_in_them(api: Api) -> None:
+    cats = {c["name"]: c for c in api.get("/api/categories").json()}
+    assert all(c["description"] for c in cats.values())
+    assert "luz" in cats["Casa"]["description"]
+    assert "Farmácia" in cats["Saúde"]["description"]
+    # a category of my own may have a description too, or none
+    r = api.post("/api/categories", {"name": "Viagem", "description": "Passagens e hotel"})
+    assert r.json()["description"] == "Passagens e hotel"
+    assert api.post("/api/categories", {"name": "Sem nota"}).json()["description"] is None
+
+
+def test_r14_24_existing_default_categories_get_their_description(
+    settings: Settings, clock: FixedClock
+) -> None:
+    def app() -> TestClient:
+        return TestClient(create_app(settings=settings, clock=clock, start_background=False))
+
+    with app() as c:  # first run seeds; then simulate an old install without descriptions
+        casa = next(x for x in c.get("/api/categories").json() if x["name"] == "Casa")
+        r = c.put(f"/api/categories/{casa['id']}", json={**casa, "description": None},
+                  headers=CSRF)  # fmt: skip
+        assert r.status_code == 200, r.text
+        r = c.post("/api/categories", json={"name": "Viagem"}, headers=CSRF)
+        assert r.status_code == 201, r.text
+    with app() as c:  # next start fills the standard ones in, leaves mine alone
+        cats = {x["name"]: x for x in c.get("/api/categories").json()}
+    assert "luz" in cats["Casa"]["description"]
+    assert cats["Viagem"]["description"] is None

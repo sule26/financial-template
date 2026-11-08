@@ -14,6 +14,7 @@ import { ProfilesPage } from "./pages/Profiles/ProfilesPage";
 import { ProjectionPage } from "./pages/Projection/ProjectionPage";
 import { ReceivablesPage } from "./pages/Receivables/ReceivablesPage";
 import { ReviewPage } from "./pages/Review/ReviewPage";
+import { HouseholdPage } from "./pages/Household/HouseholdPage";
 import { SettingsPage } from "./pages/Settings/SettingsPage";
 import { StatusPage } from "./pages/Status/StatusPage";
 import { SummaryPage } from "./pages/Summary/SummaryPage";
@@ -37,6 +38,7 @@ export function App() {
         <Route path="/projecao" element={<ProjectionPage />} />
         <Route path="/lancamentos" element={<TransactionsPage />} />
         <Route path="/revisao" element={<ReviewPage />} />
+        <Route path="/contas-da-casa" element={<HouseholdPage />} />
         <Route path="/a-receber" element={<ReceivablesPage />} />
         <Route path="/investimentos" element={<InvestmentsPage />} />
         <Route path="/cadastros" element={<CatalogPage />} />

@@ -12,7 +12,7 @@ export const SUGGESTION_LABELS: Record<string, string> = {
   refund_plan: "estorno de parcelamento",
   match_manual: "casa com lançamento manual",
   choose_manual: "escolher lançamento manual",
-  link_recurring: "compra recorrente",
+  link_recurring: "gasto recorrente",
   link_subscription: "assinatura",
   invoice_payment: "pagamento de fatura",
   internal_transfer: "transferência entre contas",

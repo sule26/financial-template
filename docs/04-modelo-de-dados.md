@@ -91,7 +91,10 @@ percentuais, eles servem de fallback). `mode` da versão ausente/`null` herda o 
  "confirm_manual_after_days": null,
  "renewal_day": null}
 ```
-`owners` e `responsible_user_id` são obrigatórios em contas.
+`owners` e `responsible_user_id` são obrigatórios em contas. `responsibles` (opcional, R14.1): quem
+paga o banco com percentuais (lista fixa somando 100,00 ou `{"split_id": …}`); numa lista fixa o
+`responsible_user_id` (principal) precisa estar nela. Cartões aceitam o mesmo campo, herdado junto com
+o `responsible_user_id` ([08](08-divisoes-e-acertos.md#donos-e-responsável)).
 `type`: `checking` (conta corrente: débito, PIX, transferência, boleto), `benefit` (VR/VA) ou `cash`
 (carteira). `confirm_manual_after_days`: para contas sem extrato em PDF (comum em benefício),
 lançamentos manuais viram definitivos após N dias ([16](16-dia-a-dia.md#meios-de-pagamento-r11)).
@@ -124,9 +127,13 @@ responsável ([08](08-divisoes-e-acertos.md#donos-e-responsável)).
 
 ### categories.json · savings_goals.json
 ```json
-{"id": "cat_casa", "name": "Casa", "color": "#4C6EF5", "budget": null}
+{"id": "cat_casa", "name": "Casa", "color": "#4C6EF5", "budget": null,
+ "description": "Contas da casa: luz, água, gás, internet; móveis, eletrodomésticos, manutenção"}
 {"id": "goal_reserva", "name": "Reserva", "monthly_amount": "500.00", "user_id": "usr_eu"}
 ```
+
+`description` (opcional, R14.24): o que entra na categoria; as padrão já vêm preenchidas e o texto
+aparece na lista e no seletor de categoria.
 
 **Categoria (tipo de gasto)** — R1.11, R1.12:
 
@@ -216,11 +223,27 @@ Mesmo formato de `transactions.json` mais:
 ```json
 {"id": "sub_streaming", "description": "STREAMING", "amount": "39.90",
  "period": "monthly", "month_of_year": null, "card_id": "card_x_black",
- "start_month": "2025-03", "end_month": null, "category_id": "cat_lazer", "allocations": null}
+ "start_month": "2025-03", "end_month": null, "category_id": "cat_lazer", "allocations": null,
+ "price_history": [{"from_month": "2026-06", "amount": "44.90"}],
+ "pauses": [{"from_month": "2026-02", "until_month": "2026-04"}]}
 ```
+`group` (R14.26): `"subscription"` (padrão) ou `"household"` (conta da casa, tela Contas da casa);
+`due_day` (1–31, opcional): dia de vencimento da conta da casa. Um lançamento que paga a conta tem
+`links.subscription_id` e `links.subscription_month` (o mês da conta que ele paga — pode ser diferente do
+`invoice_month`, ex.: paga no cartão ou com atraso); nesse mês a previsão da conta não é somada.
+`price_history` (R14.9): reajustes; o valor do mês `M` é o do reajuste com o maior `from_month ≤ M`,
+senão `amount`. `pauses` (R14.11): meses desativada (`until_month: null` = ainda desativada); nesses
+meses não há cobrança prevista. Compras recorrentes têm os mesmos dois campos (mês = mês da data da
+compra; o valor base é `estimated_amount`).
+`allocation_history` (R14.27): `[{"from_month": "2027-01", "allocations": {"split_id": "split_casal"}}]`;
+a divisão do mês `M` é a da mudança com o maior `from_month ≤ M`, senão `allocations` (`allocations: null`
+numa mudança = volta ao "Padrão"). Meses repetidos são recusados. Vale para assinaturas e gastos recorrentes.
 
 ### recurring_purchases.json
-Compras recorrentes por intervalo (R12). Formato e regras em [16](16-dia-a-dia.md#compras-recorrentes-por-intervalo-r12).
+Gastos recorrentes (antigas compras recorrentes, R12). Formato e regras em [16](16-dia-a-dia.md#compras-recorrentes-por-intervalo-r12).
+`group` (R14.26): `"purchase"` (padrão) ou `"household"` (conta da casa: cada ocorrência é um vencimento e
+registrar o pagamento não muda `last_date`). O lançamento que paga a conta tem `links.recurring_purchase_id` e
+`links.recurring_month` (o mês da conta). Também têm `price_history`, `pauses` e `allocation_history` (acima).
 
 ### rules.json
 ```json

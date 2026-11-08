@@ -6,6 +6,12 @@ import { apiError, CATALOG, mockApi, renderPage } from "../../test/utils";
 import { ReceivablesPage } from "./ReceivablesPage";
 import { byDeadline, findSettlement } from "./Upcoming";
 
+// R14.28: the page opens on next month's deadlines; these tests look at every open item
+const showAll = async () =>
+  userEvent.click(
+    await screen.findByRole("radio", { name: "Todos em aberto" }),
+  );
+
 const EMPTY_BALANCES = { user_id: "eu", incomplete_months: [], people: [] };
 
 function item(extra: Partial<ReceivableItem>): ReceivableItem {
@@ -55,6 +61,7 @@ describe("Próximos recebimentos", () => {
       "GET /api/reports/receivables": REPORT,
     });
     renderPage(<ReceivablesPage />);
+    await showAll();
     const receive = await screen.findByRole("table", { name: "Receber" });
     const rows = within(receive).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
@@ -72,8 +79,9 @@ describe("Próximos recebimentos", () => {
     const pay = screen.getByRole("table", { name: "Pagar" });
     expect(pay).toHaveTextContent("Conta X");
     expect(pay).toHaveTextContent("—");
-    expect(screen.getByText("R$ 200,50")).toBeInTheDocument();
-    expect(screen.getAllByText("R$ 45,00").length).toBe(2);
+    expect(screen.getAllByText("R$ 200,50").length).toBeGreaterThan(0);
+    // Total a pagar, the row, and Ana's per-person total (R14.28)
+    expect(screen.getAllByText("R$ 45,00").length).toBe(3);
     expect(calls.map((c) => c.path)).toContain(
       "/api/reports/receivables?user_id=eu",
     );
@@ -97,6 +105,11 @@ describe("Próximos recebimentos", () => {
       },
     });
     const { unmount } = renderPage(<ReceivablesPage />);
+    // R14.28: on next month's deadlines it says how to see the rest
+    expect(
+      await screen.findByText(/Nada vence nesse período/),
+    ).toBeInTheDocument();
+    await showAll();
     expect(
       await screen.findByText("Nada pendente para receber ou pagar."),
     ).toBeInTheDocument();
@@ -111,6 +124,7 @@ describe("Próximos recebimentos", () => {
       },
     });
     const second = renderPage(<ReceivablesPage />);
+    await showAll();
     expect(await screen.findByText("Nada a pagar.")).toBeInTheDocument();
     second.unmount();
 
@@ -123,6 +137,7 @@ describe("Próximos recebimentos", () => {
       },
     });
     const third = renderPage(<ReceivablesPage />);
+    await showAll();
     expect(await screen.findByText("Nada a receber.")).toBeInTheDocument();
     third.unmount();
 
@@ -133,6 +148,7 @@ describe("Próximos recebimentos", () => {
         apiError(500, "boom", "Falhou recebimentos"),
     });
     renderPage(<ReceivablesPage />);
+    await showAll();
     expect(await screen.findByText("Falhou recebimentos")).toBeInTheDocument();
   });
 
@@ -169,6 +185,7 @@ describe("Próximos recebimentos", () => {
     };
     const { calls } = mockApi(routes);
     renderPage(<ReceivablesPage />);
+    await showAll();
     await userEvent.click(
       await screen.findByRole("button", {
         name: "Marcar como recebido: Ana, Cartão X, out/2026",
@@ -255,6 +272,7 @@ describe("Próximos recebimentos", () => {
       },
     });
     renderPage(<ReceivablesPage />);
+    await showAll();
     const receive = await screen.findByRole("table", { name: "Receber" });
     let rows = within(receive).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
@@ -319,6 +337,7 @@ describe("Próximos recebimentos", () => {
       "DELETE /api/settlements/set_ok": () => undefined,
     });
     renderPage(<ReceivablesPage />);
+    await showAll();
     await userEvent.click(
       await screen.findByRole("switch", { name: "Mostrar recebidos" }),
     );
@@ -362,6 +381,7 @@ describe("Próximos recebimentos", () => {
       "GET /api/settlements": [],
     });
     renderPage(<ReceivablesPage />);
+    await showAll();
     await userEvent.click(
       await screen.findByRole("button", {
         name: "Marcar como recebido: Ana, Cartão X, out/2026",
@@ -414,5 +434,154 @@ describe("Próximos recebimentos", () => {
     });
     expect(findSettlement([neu, other, old, legacy], "eu", it)?.id).toBe("new");
     expect(findSettlement([legacy], "eu", it)).toBeNull();
+  });
+});
+
+describe("Previsto (R14.15)", () => {
+  it("r14_15 lists forecast debts by month, apart from the confirmed totals", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/reports/balances": EMPTY_BALANCES,
+      "GET /api/reports/receivables": {
+        user_id: "eu",
+        items: [],
+        totals: { receive: "0.00", pay: "0.00" },
+        forecast: {
+          items: [
+            {
+              counterparty_user_id: "ana",
+              direction: "receive",
+              card_id: "card_x",
+              account_id: null,
+              invoice_month: "2026-11",
+              due_date: "2026-11-10",
+              amount: "20.00",
+            },
+            {
+              counterparty_user_id: "ana",
+              direction: "receive",
+              card_id: "card_x",
+              account_id: null,
+              invoice_month: "2026-10",
+              due_date: null,
+              amount: "20.00",
+            },
+          ],
+          totals: { receive: "40.00", pay: "0.00" },
+        },
+      } satisfies Receivables,
+    });
+    renderPage(<ReceivablesPage />);
+    await showAll();
+    const table = await screen.findByRole("table", { name: "Previsto" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(
+      rows.map((r) => within(r).getAllByRole("cell")[0]?.textContent),
+    ).toEqual(["out/2026", "nov/2026"]);
+    expect(within(rows[0]!).getByText("te deve")).toBeInTheDocument();
+    expect(screen.getByText("Previsto a receber")).toBeInTheDocument();
+    expect(screen.getByText("R$ 40,00")).toBeInTheDocument();
+    // a forecast cannot be marked as received
+    expect(
+      within(table).queryByRole("button", { name: /Marcar/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("r14_15 hides the panel when there is nothing forecast", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/reports/balances": EMPTY_BALANCES,
+      "GET /api/reports/receivables": REPORT,
+    });
+    renderPage(<ReceivablesPage />);
+    await showAll();
+    await screen.findByRole("table", { name: "Receber" });
+    expect(
+      screen.queryByRole("table", { name: "Previsto" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("A receber por pessoa e período (R14.28)", () => {
+  it("r14_28 filters by person and by deadline month, with per-person totals", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/reports/balances": EMPTY_BALANCES,
+      "GET /api/reports/receivables": {
+        user_id: "eu",
+        items: [
+          item({
+            due_date: "2026-11-10",
+            invoice_month: "2026-11",
+            amount: "80.00",
+          }),
+          item({ due_date: "2026-10-10", amount: "120.00" }),
+        ],
+        totals: { receive: "200.00", pay: "0.00" },
+      } satisfies Receivables,
+    });
+    const user = userEvent.setup();
+    renderPage(<ReceivablesPage />);
+    // default: next month (today is 2026-10-12 in tests) -> only the 11-10 one
+    const table = await screen.findByRole("table", { name: "Receber" });
+    expect(within(table).getAllByRole("row").slice(1)).toHaveLength(1);
+    expect(within(table).getByText("10/11/2026")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Este mês/ }));
+    expect(
+      await within(screen.getByRole("table", { name: "Receber" })).findByText(
+        "10/10/2026",
+      ),
+    ).toBeInTheDocument();
+    await showAll();
+    const byPerson = screen.getByLabelText("Por pessoa");
+    expect(within(byPerson).getByText("R$ 200,00")).toBeInTheDocument();
+    await user.click(
+      within(byPerson).getByRole("button", { name: "Ver só Ana" }),
+    );
+    expect(screen.queryByLabelText("Por pessoa")).not.toBeInTheDocument();
+  });
+});
+
+describe("A receber: uma aba por pessoa (R14.28)", () => {
+  it("r14_28 a person who only owes by subscription has a tab with her previsto", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/reports/balances": EMPTY_BALANCES,
+      "GET /api/reports/receivables": {
+        user_id: "eu",
+        items: [],
+        totals: { receive: "0.00", pay: "0.00" },
+        forecast: {
+          items: [
+            {
+              counterparty_user_id: "ana",
+              direction: "receive",
+              card_id: "card_x",
+              account_id: null,
+              invoice_month: "2026-11",
+              due_date: "2026-11-10",
+              amount: "27.95",
+            },
+          ],
+          totals: { receive: "27.95", pay: "0.00" },
+        },
+      } satisfies Receivables,
+    });
+    const user = userEvent.setup();
+    renderPage(<ReceivablesPage />);
+    const tabs = await screen.findByRole("tablist", { name: "Pessoa" });
+    expect(within(tabs).getByRole("tab", { name: "Todas" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(await within(tabs).findByRole("tab", { name: "Ana" }));
+    const summary = await screen.findByLabelText("Resumo de Ana");
+    expect(summary).toHaveTextContent("R$ 0,00");
+    expect(summary).toHaveTextContent("R$ 27,95");
+    expect(screen.getByRole("table", { name: "Previsto" })).toHaveTextContent(
+      "Ana",
+    );
+    await user.click(within(tabs).getByRole("tab", { name: "Todas" }));
+    expect(screen.queryByLabelText("Resumo de Ana")).not.toBeInTheDocument();
   });
 });

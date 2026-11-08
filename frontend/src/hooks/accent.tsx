@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ACCENTS,
   ACCENT_STORAGE_KEY,
   accentStylesheet,
   DEFAULT_ACCENT,
@@ -28,6 +29,30 @@ export function readStoredAccent(): AccentId {
   }
 }
 
+/** R14.18: favicon in the accent colour (same coin as the logo). */
+export function faviconSvg(coin: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+    `<circle cx="16" cy="16" r="15.5" fill="${coin}"/>` +
+    `<circle cx="16" cy="16" r="12.5" fill="none" stroke="#E3C27A" stroke-width="1.2"/>` +
+    `<circle cx="16" cy="16" r="6" fill="none" stroke="#E3C27A" stroke-width="1.2"/>` +
+    `<circle cx="16" cy="16" r="2" fill="#E3C27A"/></svg>`
+  );
+}
+
+function applyFavicon(accent: AccentId): void {
+  const coin = ACCENTS.find((a) => a.id === accent)?.palette[8];
+  if (!coin) return;
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.type = "image/svg+xml";
+  link.href = `data:image/svg+xml,${encodeURIComponent(faviconSvg(coin))}`;
+}
+
 /** Puts the accent stylesheet in <head> (once) and marks <html> with the chosen accent. */
 export function applyAccent(accent: AccentId): void {
   if (!document.getElementById(STYLE_ID)) {
@@ -37,6 +62,7 @@ export function applyAccent(accent: AccentId): void {
     document.head.appendChild(style);
   }
   document.documentElement.setAttribute("data-accent", accent);
+  applyFavicon(accent);
 }
 
 interface AccentContextValue {

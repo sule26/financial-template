@@ -54,3 +54,13 @@ describe("Layout", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("header (R14.12)", () => {
+  it("r14_12 the wordmark reads controle financeiro, not livro-caixa pessoal", () => {
+    renderApp("/ajuda");
+    expect(screen.getAllByText("controle financeiro").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByText(/livro-caixa/i)).not.toBeInTheDocument();
+  });
+});

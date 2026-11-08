@@ -119,7 +119,13 @@ def test_r13_16_mark_paid_from_the_payer_side_and_additional_card(world: Api) ->
 def test_r13_16_mark_received_on_an_account(world: Api) -> None:
     _manual(world, card_id=None, account_id="acc_cc", payment_method="pix", amount="40.00")
     [item] = _items(world)
-    assert (item["account_id"], item["due_date"], item["amount"]) == ("acc_cc", None, "20.00")
+    # R14.22: acc_cc has card_main linked: deadline = due date of the invoice that a card
+    # purchase on the same day would be on
+    assert (item["account_id"], item["due_date"], item["amount"]) == (
+        "acc_cc",
+        "2026-10-10",
+        "20.00",
+    )
     r = _mark(world, card_id=None, account_id="acc_cc", invoice_month=item["invoice_month"])
     assert r.status_code == 201, r.text
     assert r.json()["note"].startswith("Recebimento Conta conjunta ")

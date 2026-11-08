@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import partial
@@ -118,6 +118,7 @@ class LedgerItem:
     purchase_date: date | None = None
     provisional: bool = False
     responsibles: Allocation | None = None  # R14.1
+    installment: tuple[int, int] | None = None  # R14.19: (n, of) of a planned installment
 
     @property
     def is_forecast(self) -> bool:
@@ -163,6 +164,18 @@ class Ledger:
         for tx in state.transactions:
             if tx.source.sha256:
                 self._by_sha[tx.source.sha256].append(tx)
+        # R14.26: a subscription month already paid by a linked transaction is not forecast again
+        self.subscription_paid: set[tuple[str, str]] = {
+            (tx.links.subscription_id, tx.links.subscription_month or tx.invoice_month)
+            for tx in state.transactions
+            if tx.links.subscription_id
+        }
+        # R14.26: household bill months already paid by a linked entry
+        self.recurring_paid: set[tuple[str, str]] = {
+            (tx.links.recurring_purchase_id, tx.links.recurring_month)
+            for tx in state.transactions
+            if tx.links.recurring_purchase_id and tx.links.recurring_month
+        }
         self._staging_by_sha: dict[str, list[Transaction]] = defaultdict(list)
         for tx in state.staging:
             if tx.source.sha256 and (tx.review is None or tx.review.status != "overlap"):
@@ -312,11 +325,15 @@ class Ledger:
                         allocations=plan.allocations,
                     )
                     if item:
+                        if charge.kind == "installment" and charge.n is not None:
+                            item = replace(item, installment=(charge.n, plan.total_installments))
                         items.append(item)
             for sub in self.s.subscriptions:
                 if not sub.card_id or self.main_card(sub.card_id) != main_id:
                     continue
                 for ch in subscription_charges(sub, [month]):
+                    if (sub.id, month) in self.subscription_paid:
+                        continue
                     item = self._forecast(
                         month=month,
                         description=sub.description,
@@ -327,7 +344,7 @@ class Ledger:
                         account_id=None,
                         method=PaymentMethod.CREDIT,
                         category_id=sub.category_id,
-                        allocations=sub.allocations,
+                        allocations=sub.allocations_in(month),
                     )
                     if item:
                         items.append(item)
@@ -337,6 +354,8 @@ class Ledger:
             card_id = rec.card_id
             for ch in recurring_charges(rec, [month], partial(self.month_for_card_date, card_id)):
                 if after is not None and ch.date is not None and ch.date <= after:
+                    continue
+                if ch.date is not None and (rec.id, month_of(ch.date)) in self.recurring_paid:
                     continue
                 item = self._forecast(
                     month=month,
@@ -348,7 +367,7 @@ class Ledger:
                     account_id=None,
                     method=rec.payment_method,
                     category_id=rec.category_id,
-                    allocations=rec.allocations,
+                    allocations=rec.allocations_in(month_of(ch.date) if ch.date else month),
                     purchase_date=ch.date,
                 )
                 if item:
@@ -456,6 +475,8 @@ class Ledger:
             for sub in self.s.subscriptions:
                 if sub.account_id == account_id and not sub.card_id:
                     for ch in subscription_charges(sub, [month]):
+                        if (sub.id, month) in self.subscription_paid:
+                            continue
                         items.append(
                             self._forecast(
                                 month=month,
@@ -467,7 +488,7 @@ class Ledger:
                                 account_id=account_id,
                                 method=sub.payment_method,
                                 category_id=sub.category_id,
-                                allocations=sub.allocations,
+                                allocations=sub.allocations_in(month),
                             )
                         )
         if not fully:
@@ -475,6 +496,11 @@ class Ledger:
                 if rec.account_id == account_id and not rec.card_id:
                     for ch in recurring_charges(rec, [month], month_of):
                         if ch.date is not None and self._covered(account_id, ch.date):
+                            continue
+                        if (
+                            ch.date is not None
+                            and (rec.id, month_of(ch.date)) in self.recurring_paid
+                        ):
                             continue
                         items.append(
                             self._forecast(
@@ -487,7 +513,9 @@ class Ledger:
                                 account_id=account_id,
                                 method=rec.payment_method,
                                 category_id=rec.category_id,
-                                allocations=rec.allocations,
+                                allocations=rec.allocations_in(
+                                    month_of(ch.date) if ch.date else month
+                                ),
                                 purchase_date=ch.date,
                             )
                         )

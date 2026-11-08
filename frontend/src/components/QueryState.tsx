@@ -39,7 +39,7 @@ const COLLECTION_LABELS: Record<string, [string, string]> = {
   transactions: ["lançamento", "lançamentos"],
   staging: ["item em revisão", "itens em revisão"],
   subscriptions: ["assinatura", "assinaturas"],
-  recurring_purchases: ["compra recorrente", "compras recorrentes"],
+  recurring_purchases: ["gasto recorrente", "gastos recorrentes"],
   installment_plans: ["parcelamento", "parcelamentos"],
   investments: ["investimento", "investimentos"],
   settlements: ["acerto", "acertos"],

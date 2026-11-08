@@ -1,6 +1,27 @@
 /** Configurações (R13.10): theme and accent colour, both remembered in this browser. */
-import { Group, Radio, SimpleGrid, Stack, Text } from "@mantine/core";
-import { IconPalette, IconSettings, IconSunMoon } from "@tabler/icons-react";
+import {
+  Group,
+  MultiSelect,
+  Radio,
+  SimpleGrid,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { LANGS, useLang, type Lang } from "../../i18n/i18n";
+import {
+  IconLanguage,
+  IconPalette,
+  IconSettings,
+  IconSunMoon,
+  IconUser,
+} from "@tabler/icons-react";
+import { useState } from "react";
+import { useList } from "../../api/hooks";
+import {
+  knownPeople,
+  readDefaultPeople,
+  saveDefaultPeople,
+} from "../../hooks/defaultPeople";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { PageHeader, Panel } from "../../components/ui";
 import { useAccent } from "../../hooks/accent";
@@ -22,6 +43,45 @@ function Swatch({ accent }: { accent: Accent }) {
   );
 }
 
+/** R14.25: who Resumo, Projeção and A receber show by default. */
+function DefaultPeople() {
+  const users = useList("users");
+  const [value, setValue] = useState<string[]>(readDefaultPeople);
+  return (
+    <MultiSelect
+      label="Mostrar por padrão"
+      description="Resumo e Projeção abrem com a parte dessas pessoas (e a renda delas); A receber abre como a primeira. Vazio = todos (a casa)."
+      placeholder={value.length ? undefined : "Todos"}
+      data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+      value={knownPeople(value, users.data)}
+      onChange={(ids) => {
+        setValue(ids);
+        saveDefaultPeople(ids);
+      }}
+      clearable
+      maw={420}
+    />
+  );
+}
+
+/** R14.13: pt-BR / en, remembered in this browser. */
+function LanguageChoice() {
+  const { lang, setLang } = useLang();
+  return (
+    <Radio.Group
+      value={lang}
+      onChange={(v) => setLang(v as Lang)}
+      aria-label="Idioma"
+    >
+      <Group mt={4}>
+        {LANGS.map((l) => (
+          <Radio key={l.id} value={l.id} label={l.name} />
+        ))}
+      </Group>
+    </Radio.Group>
+  );
+}
+
 export function SettingsPage() {
   const { accent, setAccent } = useAccent();
   return (
@@ -32,6 +92,22 @@ export function SettingsPage() {
         icon={<IconSettings size={22} stroke={1.7} />}
         subtitle="Aparência da app. As escolhas ficam guardadas neste navegador."
       />
+      <Panel
+        title="Idioma"
+        icon={<IconLanguage size={18} stroke={1.8} />}
+        description="Escolha o idioma da interface. Valores continuam em reais (R$)."
+        interactive={false}
+      >
+        <LanguageChoice />
+      </Panel>
+      <Panel
+        title="Pessoa padrão"
+        icon={<IconUser size={18} stroke={1.8} />}
+        description="Para cada tela já abrir voltada para você (ou para você e sua esposa)."
+        interactive={false}
+      >
+        <DefaultPeople />
+      </Panel>
       <Panel
         title="Tema"
         icon={<IconSunMoon size={18} stroke={1.8} />}

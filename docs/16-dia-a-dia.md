@@ -68,7 +68,12 @@ Atalho global (botão "+" e tecla `N`). Campos, em ordem:
 | Recorrente? | não; "sim" abre o cadastro de compra recorrente já preenchido |
 
 Salvar cria o lançamento `source.type = manual`, `provisional = true` (exceto `cash`), com
-`invoice_month` calculado ([07](07-regras-de-negocio.md#mês-de-fatura)).
+`invoice_month` calculado ([07](07-regras-de-negocio.md#mês-de-fatura)). Se esse mês não é o que está
+na tela (data futura ou compra depois do fechamento), a app vai para ele e avisa (R14.17).
+
+Depois de salvo, o lançamento manual pode mudar descrição, valor, data, categoria, divisão e também
+**meio de pagamento, cartão ou conta** (R14.23, mesmas regras de um novo); o `invoice_month` é
+recalculado. Lançamentos importados só mudam classificação (categoria, divisão, tipo, nota).
 
 ## Casamento previsto × importado (R10.3)
 
@@ -92,7 +97,47 @@ Linha 9 da tabela de [09](09-revisao-e-reconciliacao.md#reconciliação), aplica
 Parcelado lançado à mão (ex.: 3x no crédito) cria um plano `origin: manual`; as parcelas importadas
 casam com o plano pela linha 1 da reconciliação, não pela linha 9.
 
+## Contas da casa (R14.26)
+
+Luz, água, gás, aluguel, condomínio, internet: cadastre em **Cadastros → Gastos recorrentes** com tipo
+**Conta da casa**, intervalo (ex.: a cada 1 mês), um vencimento de referência (ex.: 10/09), meio de
+pagamento (boleto/PIX/débito numa conta, ou cartão), divisão (ex.: "Casal"), reajustes quando o valor muda
+e **mudanças de divisão** (ex.: "a partir de jan/2027, Casal" — R14.27). Cada ocorrência é um vencimento;
+pagar não muda as datas. Assinaturas antigas marcadas como conta da casa continuam na tela. A tela **Contas da casa** mostra,
+para o mês escolhido:
+
+| Coluna | Significado |
+|--------|-------------|
+| Vencimento | dia de vencimento no mês (31 em fevereiro → último dia) |
+| Previsto | valor vigente no mês (reajustes); 0 se desativada no mês |
+| Pago | soma dos lançamentos vinculados a essa conta no mês |
+| Situação | `paga` (há pagamento), `atrasada` (venceu sem pagamento), `pendente`, `desativada` |
+
+"Registrar pagamento" cria um lançamento manual com o valor pago, a data, a categoria, a divisão e o
+meio de pagamento da conta, vinculado a ela e ao **mês da conta** (`links.recurring_purchase_id` + `links.recurring_month`; nas
+assinaturas antigas `links.subscription_id` + `links.subscription_month` — pagar a conta de outubro no cartão, que cai na fatura de novembro, ou com
+atraso em novembro, continua quitando outubro). Num mês com lançamento vinculado a previsão da conta
+**não** é somada de novo (o real substitui o previsto); os meses seguintes continuam previstos. Se a
+linha do extrato/fatura absorver esse lançamento na Revisão, o vínculo passa para ela. Pagamento de conta
+não pode ser parcelado. API: `GET /api/reports/household?month=YYYY-MM` →
+`{month, items: [{source, id, description, category_id, payment_method, card_id, account_id,
+allocations, due_date, expected, paid, status, transaction_ids}], totals: {expected, paid}}`;
+`POST /api/transactions` aceita `recurring_purchase_id` + `recurring_month` (e `subscription_id` +
+`subscription_month`). A divisão de cada mês é a vigente nele (R14.27).
+
+Parcelamentos: `GET /api/installment-plans-progress` → por plano `{status, remaining, remaining_amount,
+next_n, next_month, next_amount, installment_amount}` (R14.19, R14.21). Um parcelamento importado só muda
+descrição, categoria e divisão (`422 imported_readonly` para cartão, valor, parcelas e 1ª fatura, R14.20).
+Mudar o meio de pagamento de um lançamento manual recalcula `provisional` (só dinheiro é definitivo).
+
 ## Compras recorrentes por intervalo (R12)
+
+Na tela o nome é **Gastos recorrentes** (nem tudo é compra). **Repetir** (R14.30): "de tantos em
+tantos" (N dias/semanas/meses a partir da última data) ou "todo dia X do mês" (gravado como a cada 1 mês
+com a data no dia X; num mês sem dia X vale o último dia, e a âncora vai para o último mês que tem o dia X,
+ex.: 31 → 31/08, 30/09, 31/10). A coluna **Próxima** mostra
+a próxima data prevista (a adiada, se houver). Os previstos do mês aparecem também em **Lançamentos →
+Previstos neste mês** (R14.29), junto com parcelas e assinaturas, até virarem lançamento.
 
 Diferente de **assinatura** (valor fixo, todo mês ou todo ano, [07](07-regras-de-negocio.md#assinaturas)),
 a compra recorrente é algo que eu compro de tempos em tempos, com valor aproximado. Ex.: ração dos
@@ -150,7 +195,12 @@ Hoje > data prevista + tolerância e nenhuma compra casou → aviso na tela Lan�
 |------|--------|
 | Adiar | Nova data informada vira a **próxima ocorrência** (`next_date`); as seguintes contam a partir dela |
 | Pular | Data em `skipped_dates`; próxima = prevista + intervalo |
-| Encerrar | `active = false`; some da projeção |
+| Desativar | Abre um período desativado (`pauses`) a partir da primeira compra que não aconteceu (ou do mês atual); some da projeção e dos avisos (R14.10, R14.11) |
+| Ativar | Fecha o período desativado no mês anterior à volta; opcionalmente com a data da próxima compra |
+
+`active = false` (chave "Ativa" em Cadastros) continua existindo para desligar de vez. A data da última
+compra no cadastro é a última compra que **aconteceu**; a próxima prevista é ela + o intervalo (R14.14).
+Preço com reajustes (`price_history`, R14.9) e períodos desativados se editam em Cadastros.
 
 Enquanto o aviso não é tratado, a ocorrência continua na projeção (prefiro superestimar a esquecer um gasto).
 

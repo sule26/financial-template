@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+import { LanguageProvider, useLang } from "./i18n/i18n";
 import { localStorageColorSchemeManager, MantineProvider } from "@mantine/core";
 import { DatesProvider } from "@mantine/dates";
 import { Notifications } from "@mantine/notifications";
@@ -68,19 +70,29 @@ export function Providers({
       ? { future }
       : { future, initialEntries: [initialPath] };
   return (
-    <AccentProvider>
-      {(accent) => (
-        <ThemedMantine accent={accent}>
-          <DatesProvider settings={DATES_SETTINGS}>
-            <Notifications position="top-right" />
-            <QueryClientProvider client={qc}>
-              <MonthProvider today={today}>
-                <Router {...routerProps}>{children}</Router>
-              </MonthProvider>
-            </QueryClientProvider>
-          </DatesProvider>
-        </ThemedMantine>
-      )}
-    </AccentProvider>
+    <LanguageProvider>
+      <LangKeyed>
+        <AccentProvider>
+          {(accent) => (
+            <ThemedMantine accent={accent}>
+              <DatesProvider settings={DATES_SETTINGS}>
+                <Notifications position="top-right" />
+                <QueryClientProvider client={qc}>
+                  <MonthProvider today={today}>
+                    <Router {...routerProps}>{children}</Router>
+                  </MonthProvider>
+                </QueryClientProvider>
+              </DatesProvider>
+            </ThemedMantine>
+          )}
+        </AccentProvider>
+      </LangKeyed>
+    </LanguageProvider>
   );
+}
+
+/** R14.13: changing the language re-renders the whole tree (formatters read it at render). */
+function LangKeyed({ children }: { children: ReactNode }) {
+  const { lang } = useLang();
+  return <Fragment key={lang}>{children}</Fragment>;
 }

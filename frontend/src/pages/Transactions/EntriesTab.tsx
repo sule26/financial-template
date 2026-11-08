@@ -27,6 +27,13 @@ import {
   AllocationPicker,
   allocationValid,
 } from "../../components/AllocationPicker";
+import { useDefaultSplit } from "../../components/defaultSplit";
+import {
+  checkPayment,
+  PaymentTarget,
+  paymentBody,
+  type PaymentDraft,
+} from "../Catalog/shared";
 import { CategorySelect } from "../../components/CategorySelect";
 import { QueryState, errorText } from "../../components/QueryState";
 import {
@@ -321,6 +328,7 @@ export function EntriesTab() {
           </Table>
         </Table.ScrollContainer>
       </QueryState>
+      <PlannedInstallments month={month} />
       <Modal
         opened={editing !== null}
         onClose={() => setEditing(null)}
@@ -344,6 +352,13 @@ export function EditTransactionForm({
   onDone: () => void;
 }) {
   const manual = tx.source.type === "manual";
+  // R14.23: a manual entry can move to another payment method / card / account.
+  const [payment, setPayment] = useState<PaymentDraft>({
+    payment_method: tx.payment_method,
+    card_id: tx.card_id,
+    account_id: tx.account_id,
+  });
+  const defaultHint = useDefaultSplit(payment.card_id, payment.account_id);
   const [categoryId, setCategoryId] = useState<string | null>(tx.category_id);
   const [allocations, setAllocations] = useState<Allocation | null>(
     tx.allocations,
@@ -371,6 +386,14 @@ export function EditTransactionForm({
       kind,
     };
     if (manual) {
+      const paymentError = checkPayment(payment);
+      if (paymentError) return setError(paymentError);
+      if (
+        payment.payment_method !== tx.payment_method ||
+        payment.card_id !== tx.card_id ||
+        payment.account_id !== tx.account_id
+      )
+        Object.assign(body, paymentBody(payment));
       const amount = parseMoneyInput(amountText);
       if (!amount) return setError("Valor inválido");
       if (!description.trim()) return setError("Informe a descrição");
@@ -389,6 +412,10 @@ export function EditTransactionForm({
       <Stack gap="sm">
         {manual ? (
           <>
+            <PaymentTarget
+              value={payment}
+              onChange={(patch) => setPayment((p) => ({ ...p, ...patch }))}
+            />
             <TextInput
               label="Descrição"
               value={description}
@@ -419,7 +446,11 @@ export function EditTransactionForm({
           allowDeselect={false}
         />
         <CategorySelect value={categoryId} onChange={setCategoryId} />
-        <AllocationPicker value={allocations} onChange={setAllocations} />
+        <AllocationPicker
+          value={allocations}
+          onChange={setAllocations}
+          defaultHint={defaultHint}
+        />
         <TextInput
           label="Nota"
           value={note}
@@ -440,5 +471,84 @@ export function EditTransactionForm({
         </Group>
       </Stack>
     </form>
+  );
+}
+
+/** One item of GET /api/reports/month-items, as far as this panel needs it. */
+interface PlannedItem {
+  description: string;
+  amount: string;
+  origin: string;
+  card_id: string | null;
+  account_id: string | null;
+  ref_id: string | null;
+  purchase_date: string | null;
+  installment: { n: number; of: number } | null;
+}
+
+const PLANNED_ORIGINS = ["plan", "anticipation", "subscription", "recurring"];
+
+function plannedBadge(i: PlannedItem) {
+  if (i.installment)
+    return (
+      <StatusBadge tone="neutral">
+        parcela {i.installment.n}/{i.installment.of}
+      </StatusBadge>
+    );
+  if (i.origin === "anticipation")
+    return <StatusBadge tone="accent">antecipação</StatusBadge>;
+  if (i.origin === "subscription")
+    return <StatusBadge tone="accent">assinatura</StatusBadge>;
+  return <StatusBadge tone="accent">gasto recorrente</StatusBadge>;
+}
+
+/**
+ * R14.19 + R14.29: what is still expected this month and not launched yet — installments
+ * (with "parcela N/M"), subscriptions and gastos recorrentes (contas da casa included). They
+ * become real lançamentos when the invoice/statement is imported or the payment is registered.
+ */
+export function PlannedInstallments({ month }: { month: string }) {
+  const names = useNames();
+  const path = `/api/reports/month-items?month=${encodeURIComponent(month)}`;
+  const items = useGet<PlannedItem[]>(["reports", "month-items", path], path);
+  const planned = (items.data ?? []).filter((i) =>
+    PLANNED_ORIGINS.includes(i.origin),
+  );
+  if (planned.length === 0) return null;
+  return (
+    <Stack gap={6} mt="lg" component="section" aria-label="Previstos neste mês">
+      <Text fw={650}>Previstos neste mês</Text>
+      <Text size="xs" c="dimmed">
+        Parcelas, assinaturas e gastos recorrentes que ainda não viraram
+        lançamento: viram quando a fatura/extrato for importada (ou o pagamento
+        da conta for registrado).
+      </Text>
+      <Table.ScrollContainer minWidth={640} className="et-table-card">
+        <Table aria-label="Previstos neste mês">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Descrição</Table.Th>
+              <Table.Th>Tipo</Table.Th>
+              <Table.Th>Data</Table.Th>
+              <Table.Th>Cartão / conta</Table.Th>
+              <Table.Th ta="right">Valor</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {planned.map((i, k) => (
+              <Table.Tr key={`${i.origin}-${i.ref_id}-${k}`}>
+                <Table.Td>{i.description}</Table.Td>
+                <Table.Td>{plannedBadge(i)}</Table.Td>
+                <Table.Td>
+                  {i.purchase_date ? formatDate(i.purchase_date) : "—"}
+                </Table.Td>
+                <Table.Td>{names.owner(i.card_id ?? i.account_id)}</Table.Td>
+                <Table.Td ta="right">{formatMoney(i.amount)}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </Stack>
   );
 }

@@ -1,14 +1,20 @@
 /** Formatting helpers. Money comes from the API as decimal strings; the backend computes. */
 
-const brl = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
+import { currentLang } from "../i18n/i18n";
+
+// R14.13: amounts are always in reais; only the number format follows the language.
+const BRL = {
+  "pt-BR": new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }),
+  en: new Intl.NumberFormat("en-US", { style: "currency", currency: "BRL" }),
+};
 
 export function formatMoney(value: string | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = Number(value);
-  return Number.isFinite(n) ? brl.format(n) : value;
+  return Number.isFinite(n) ? BRL[currentLang()].format(n) : value;
 }
 
 /** Parse a user-typed amount ("1.234,56", "1234.56", "12,5") into a canonical "1234.56". */
@@ -26,13 +32,13 @@ export function parseMoneyInput(text: string): string | null {
 
 export function formatPct(value: string | null | undefined): string {
   if (value === null || value === undefined) return "—";
-  return `${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+  return `${Number(value).toLocaleString(currentLang() === "en" ? "en-US" : "pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+  return currentLang() === "en" ? `${m}/${d}/${y}` : `${d}/${m}/${y}`;
 }
 
 export const METHOD_LABELS: Record<string, string> = {

@@ -27,6 +27,31 @@ import {
   allocationValid,
 } from "../../components/AllocationPicker";
 import { CategorySelect } from "../../components/CategorySelect";
+import { useDefaultSplit } from "../../components/defaultSplit";
+import { StatusBadge } from "../../components/ui";
+import { useMonth } from "../../hooks/month";
+import {
+  AllocationHistoryEditor,
+  checkAllocationHistory,
+  checkPauses,
+  checkPrices,
+  describePrice,
+  describeSplit,
+  nextDate,
+  withDay,
+  toAllocationDrafts,
+  toAllocationHistory,
+  type AllocationDraft,
+  pausedIn,
+  PausesEditor,
+  PriceHistoryEditor,
+  toPauseDrafts,
+  toPauses,
+  toPriceDrafts,
+  toPrices,
+  type PauseDraft,
+  type PriceDraft,
+} from "./schedule";
 import {
   formatDate,
   formatMoney,
@@ -75,6 +100,7 @@ interface CategoryDraft {
   name: string;
   color: string;
   budget: string;
+  description: string;
 }
 
 /** Portuguese names of the collections touched when a category is deleted. */
@@ -83,7 +109,7 @@ export const COLLECTION_LABELS: Record<string, string> = {
   staging: "lançamentos em revisão",
   installment_plans: "parcelamentos",
   subscriptions: "assinaturas",
-  recurring_purchases: "compras recorrentes",
+  recurring_purchases: "gastos recorrentes",
   annotations: "edições guardadas",
   rules: "regras",
 };
@@ -108,6 +134,12 @@ function CategoryForm({ draft, set }: FormProps<CategoryDraft>) {
         required
         value={draft.name}
         onChange={(e) => set({ name: e.currentTarget.value })}
+      />
+      <TextInput
+        label="O que entra aqui"
+        description="Opcional: aparece ao escolher a categoria (ex.: mercado, feira, padaria)"
+        value={draft.description}
+        onChange={(e) => set({ description: e.currentTarget.value })}
       />
       <ColorInput
         label="Cor"
@@ -145,13 +177,27 @@ export function CategoriesTab() {
             </Group>
           ),
         },
+        {
+          header: "O que entra",
+          cell: (c: Category) => (
+            <Text size="sm" c="dimmed">
+              {c.description || "—"}
+            </Text>
+          ),
+        },
         { header: "Orçamento", cell: (c: Category) => formatMoney(c.budget) },
       ]}
-      blank={() => ({ name: "", color: "#868E96", budget: "" })}
+      blank={() => ({
+        name: "",
+        color: "#868E96",
+        budget: "",
+        description: "",
+      })}
       fromItem={(c) => ({
         name: c.name,
         color: c.color,
         budget: moneyToInput(c.budget),
+        description: c.description ?? "",
       })}
       validate={(d) =>
         (!d.name.trim() ? "Nome: obrigatório" : null) ??
@@ -164,12 +210,13 @@ export function CategoriesTab() {
         name: d.name.trim(),
         color: d.color,
         budget: moneyOrNull(d.budget),
+        description: d.description.trim() || null,
       })}
       form={CategoryForm}
       deleteWarning={
         <Alert color="yellow" variant="light">
           Se a categoria estiver em uso, os lançamentos, parcelamentos,
-          assinaturas, compras recorrentes e regras que a usam ficam{" "}
+          assinaturas, gastos recorrentes e regras que a usam ficam{" "}
           <strong>sem categoria</strong> e aparecem no alerta para
           recategorizar.
         </Alert>
@@ -272,6 +319,11 @@ interface SubscriptionDraft extends PaymentDraft {
   end_month: string;
   category_id: string | null;
   allocations: Allocation | null;
+  prices: PriceDraft[];
+  pauses: PauseDraft[];
+  splits: AllocationDraft[];
+  group: "subscription" | "household";
+  due_day: number | null;
 }
 
 export function checkSubscription(d: SubscriptionDraft): string | null {
@@ -285,12 +337,25 @@ export function checkSubscription(d: SubscriptionDraft): string | null {
     if (!MONTH_RE.test(d.end_month.trim())) return "Fim: escolha o mês";
     if (d.end_month.trim() < d.start_month.trim()) return "Fim antes do início";
   }
-  return checkPayment(d) ?? checkAlloc(d.allocations);
+  return (
+    checkPrices(d.prices) ??
+    checkPauses(d.pauses) ??
+    checkPayment(d) ??
+    checkAlloc(d.allocations) ??
+    checkAllocationHistory(d.splits)
+  );
 }
 
 function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
+  const defaultHint = useDefaultSplit(draft.card_id, draft.account_id);
   return (
     <>
+      {draft.group === "household" && (
+        <Alert color="blue" variant="light">
+          Esta assinatura aparece em Contas da casa. Contas da casa novas se
+          cadastram em Gastos recorrentes, tipo “Conta da casa”.
+        </Alert>
+      )}
       <TextInput
         label="Descrição"
         required
@@ -299,7 +364,10 @@ function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
       />
       <Group grow align="flex-end">
         <TextInput
-          label="Valor"
+          label={draft.prices.length ? "Valor inicial" : "Valor"}
+          description={
+            draft.prices.length ? "Vale até o primeiro reajuste" : undefined
+          }
           required
           placeholder="0,00"
           inputMode="decimal"
@@ -336,6 +404,19 @@ function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
         )}
       </Group>
       <PaymentTarget value={draft} onChange={set} />
+      {draft.group === "household" && (
+        <NumberInput
+          label="Dia de vencimento"
+          description="Opcional: mostra como atrasada depois desse dia sem pagamento"
+          min={1}
+          max={31}
+          allowDecimal={false}
+          value={draft.due_day ?? ""}
+          onChange={(v) =>
+            set({ due_day: v === "" ? null : Math.trunc(Number(v)) })
+          }
+        />
+      )}
       <Group grow>
         <MonthField
           label="Início"
@@ -359,6 +440,19 @@ function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
       <AllocationPicker
         value={draft.allocations}
         onChange={(allocations) => set({ allocations })}
+        defaultHint={defaultHint}
+      />
+      <AllocationHistoryEditor
+        rows={draft.splits}
+        onChange={(splits) => set({ splits })}
+      />
+      <PriceHistoryEditor
+        rows={draft.prices}
+        onChange={(prices) => set({ prices })}
+      />
+      <PausesEditor
+        rows={draft.pauses}
+        onChange={(pauses) => set({ pauses })}
       />
     </>
   );
@@ -366,6 +460,7 @@ function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
 
 export function SubscriptionsTab() {
   const names = useNames();
+  const { current } = useMonth();
   return (
     <CrudTab<"subscriptions", SubscriptionDraft>
       resource="subscriptions"
@@ -374,8 +469,24 @@ export function SubscriptionsTab() {
       emptyText="Nenhuma assinatura cadastrada."
       rowName={(s) => s.description}
       columns={[
-        { header: "Descrição", cell: (s: Subscription) => s.description },
-        { header: "Valor", cell: (s: Subscription) => formatMoney(s.amount) },
+        {
+          header: "Descrição",
+          cell: (s: Subscription) => (
+            <>
+              {s.description}{" "}
+              {s.group === "household" && (
+                <StatusBadge tone="accent" size="xs">
+                  conta da casa
+                </StatusBadge>
+              )}
+            </>
+          ),
+        },
+        {
+          header: "Valor atual",
+          cell: (s: Subscription) =>
+            describePrice(s.amount, s.price_history, current),
+        },
         {
           header: "Período",
           cell: (s: Subscription) =>
@@ -402,7 +513,15 @@ export function SubscriptionsTab() {
         },
         {
           header: "Divisão",
-          cell: (s: Subscription) => describeAllocation(s.allocations, names),
+          cell: (s: Subscription) =>
+            describeSplit(s.allocations, s.allocation_history, current, (a) =>
+              describeAllocation(a, names),
+            ),
+        },
+        {
+          header: "Situação",
+          cell: (s: Subscription) =>
+            pausedIn(s.pauses, current) ? "desativada" : "ativa",
         },
       ]}
       blank={() => ({
@@ -417,6 +536,11 @@ export function SubscriptionsTab() {
         end_month: "",
         category_id: null,
         allocations: null,
+        prices: [],
+        pauses: [],
+        splits: [],
+        group: "subscription",
+        due_day: null,
       })}
       fromItem={(s) => ({
         description: s.description,
@@ -430,6 +554,11 @@ export function SubscriptionsTab() {
         end_month: s.end_month ?? "",
         category_id: s.category_id,
         allocations: s.allocations,
+        prices: toPriceDrafts(s.price_history),
+        pauses: toPauseDrafts(s.pauses),
+        splits: toAllocationDrafts(s.allocation_history),
+        group: s.group ?? "subscription",
+        due_day: s.due_day ?? null,
       })}
       validate={checkSubscription}
       toBody={(d) => ({
@@ -442,6 +571,11 @@ export function SubscriptionsTab() {
         end_month: orNull(d.end_month),
         category_id: d.category_id,
         allocations: d.allocations,
+        price_history: toPrices(d.prices),
+        pauses: toPauses(d.pauses),
+        allocation_history: toAllocationHistory(d.splits),
+        group: d.group,
+        due_day: d.group === "household" ? d.due_day : null,
       })}
       form={SubscriptionForm}
     />
@@ -456,10 +590,17 @@ interface RecurringDraft extends PaymentDraft {
   estimated_amount: string;
   every_value: number | null;
   every_unit: RecurringPurchase["every"]["unit"];
+  /** R14.30: "interval" = de N em N; "day" = todo dia X do mês. */
+  repeat: "interval" | "day";
+  day: number | null;
   last_date: string;
   category_id: string | null;
   allocations: Allocation | null;
   active: boolean;
+  prices: PriceDraft[];
+  pauses: PauseDraft[];
+  splits: AllocationDraft[];
+  group: "purchase" | "household";
 }
 
 const UNIT_LABELS: Record<string, string> = {
@@ -472,15 +613,37 @@ export function checkRecurring(d: RecurringDraft): string | null {
   if (!d.description.trim()) return "Descrição: obrigatória";
   const money = checkMoney(d.estimated_amount, "Valor estimado", true);
   if (money) return money;
-  if (!d.every_value || d.every_value < 1)
+  if (d.repeat === "day") {
+    if (!d.day || d.day < 1 || d.day > 31)
+      return "Dia do mês: informe de 1 a 31";
+  } else if (!d.every_value || d.every_value < 1)
     return "Intervalo: informe um número ≥ 1";
   if (!DATE_RE.test(d.last_date.trim())) return "Última compra: escolha a data";
-  return checkPayment(d) ?? checkAlloc(d.allocations);
+  return (
+    checkPrices(d.prices) ??
+    checkPauses(d.pauses) ??
+    checkPayment(d) ??
+    checkAlloc(d.allocations) ??
+    checkAllocationHistory(d.splits)
+  );
 }
 
 function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
+  const defaultHint = useDefaultSplit(draft.card_id, draft.account_id);
+  const bill = draft.group === "household";
   return (
     <>
+      <Radio.Group
+        label="Tipo"
+        description="Conta da casa (luz, água, aluguel, condomínio, internet…) aparece em Contas da casa: cada ocorrência é um vencimento, e registrar o pagamento não muda as datas."
+        value={draft.group}
+        onChange={(v) => set({ group: v as RecurringDraft["group"] })}
+      >
+        <Group mt={4}>
+          <Radio value="purchase" label="Gasto recorrente" />
+          <Radio value="household" label="Conta da casa" />
+        </Group>
+      </Radio.Group>
       <TextInput
         label="Descrição"
         required
@@ -493,40 +656,83 @@ function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
         value={draft.match_description}
         onChange={(e) => set({ match_description: e.currentTarget.value })}
       />
+      <Radio.Group
+        label="Repetir"
+        value={draft.repeat}
+        onChange={(v) => set({ repeat: v as RecurringDraft["repeat"] })}
+      >
+        <Group mt={4}>
+          <Radio
+            value="interval"
+            label="De tantos em tantos (ex.: de 30 em 30 dias)"
+          />
+          <Radio value="day" label="Todo dia X do mês" />
+        </Group>
+      </Radio.Group>
       <Group grow align="flex-end">
         <TextInput
-          label="Valor estimado"
+          label={
+            draft.prices.length ? "Valor estimado inicial" : "Valor estimado"
+          }
+          description={
+            draft.prices.length ? "Vale até o primeiro reajuste" : undefined
+          }
           required
           placeholder="0,00"
           inputMode="decimal"
           value={draft.estimated_amount}
           onChange={(e) => set({ estimated_amount: e.currentTarget.value })}
         />
-        <NumberInput
-          label="A cada"
-          min={1}
-          allowDecimal={false}
-          value={draft.every_value ?? ""}
-          onChange={(v) =>
-            set({ every_value: v === "" ? null : Math.trunc(Number(v)) })
-          }
-        />
-        <NativeSelect
-          label="Unidade"
-          data={Object.entries(UNIT_LABELS).map(([value, label]) => ({
-            value,
-            label,
-          }))}
-          value={draft.every_unit}
-          onChange={(e) =>
-            set({
-              every_unit: e.currentTarget.value as RecurringDraft["every_unit"],
-            })
-          }
-        />
+        {draft.repeat === "day" ? (
+          <NumberInput
+            label="Dia do mês"
+            description="31 em mês mais curto = último dia do mês"
+            min={1}
+            max={31}
+            allowDecimal={false}
+            value={draft.day ?? ""}
+            onChange={(v) =>
+              set({ day: v === "" ? null : Math.trunc(Number(v)) })
+            }
+          />
+        ) : (
+          <NumberInput
+            label="A cada"
+            min={1}
+            allowDecimal={false}
+            value={draft.every_value ?? ""}
+            onChange={(v) =>
+              set({ every_value: v === "" ? null : Math.trunc(Number(v)) })
+            }
+          />
+        )}
+        {draft.repeat === "interval" && (
+          <NativeSelect
+            label="Unidade"
+            data={Object.entries(UNIT_LABELS).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+            value={draft.every_unit}
+            onChange={(e) =>
+              set({
+                every_unit: e.currentTarget
+                  .value as RecurringDraft["every_unit"],
+              })
+            }
+          />
+        )}
       </Group>
       <DateField
-        label="Data da última compra"
+        label={bill ? "Vencimento de referência" : "Data da última compra"}
+        description={
+          bill
+            ? "Um vencimento da conta (ex.: 10/09). Os próximos vencem a cada intervalo a partir dele, pagos ou não."
+            : "A última vez que a compra aconteceu de verdade (e já está lançada ou numa fatura). A próxima prevista é esta data + o intervalo; se esta é a deste mês e ainda não foi lançada, use a data da compra anterior." +
+              (draft.repeat === "day"
+                ? " Em “Todo dia X do mês”, vale o mês desta data, no dia escolhido."
+                : "")
+        }
         required
         value={draft.last_date}
         onChange={(last_date) => set({ last_date })}
@@ -541,9 +747,23 @@ function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
       <AllocationPicker
         value={draft.allocations}
         onChange={(allocations) => set({ allocations })}
+        defaultHint={defaultHint}
+      />
+      <AllocationHistoryEditor
+        rows={draft.splits}
+        onChange={(splits) => set({ splits })}
+      />
+      <PriceHistoryEditor
+        rows={draft.prices}
+        onChange={(prices) => set({ prices })}
+      />
+      <PausesEditor
+        rows={draft.pauses}
+        onChange={(pauses) => set({ pauses })}
       />
       <Switch
         label="Ativa"
+        description="Desligada = nunca mais prevista. Para uma pausa com começo e fim, use os períodos acima (ou Desativar/Ativar em Lançamentos → Recorrentes)."
         checked={draft.active}
         onChange={(e) => set({ active: e.currentTarget.checked })}
       />
@@ -553,18 +773,32 @@ function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
 
 export function RecurringTab() {
   const names = useNames();
+  const { current } = useMonth();
   return (
     <CrudTab<"recurring-purchases", RecurringDraft>
       resource="recurring-purchases"
-      title="Compras recorrentes"
-      noun="compra recorrente"
-      emptyText="Nenhuma compra recorrente cadastrada."
+      title="Gastos recorrentes"
+      noun="gasto recorrente"
+      emptyText="Nenhum gasto recorrente cadastrado."
       rowName={(r) => r.description}
       columns={[
-        { header: "Descrição", cell: (r: RecurringPurchase) => r.description },
+        {
+          header: "Descrição",
+          cell: (r: RecurringPurchase) => (
+            <>
+              {r.description}{" "}
+              {r.group === "household" && (
+                <StatusBadge tone="accent" size="xs">
+                  conta da casa
+                </StatusBadge>
+              )}
+            </>
+          ),
+        },
         {
           header: "Valor estimado",
-          cell: (r: RecurringPurchase) => formatMoney(r.estimated_amount),
+          cell: (r: RecurringPurchase) =>
+            describePrice(r.estimated_amount, r.price_history, current),
         },
         {
           header: "Intervalo",
@@ -577,7 +811,11 @@ export function RecurringTab() {
         },
         {
           header: "Próxima",
-          cell: (r: RecurringPurchase) => formatDate(r.next_date),
+          // the planned next date (R12.2), not only the postponed one
+          cell: (r: RecurringPurchase) =>
+            r.active && !pausedIn(r.pauses, current)
+              ? formatDate(nextDate(r, current))
+              : "—",
         },
         {
           header: "Pagamento",
@@ -585,8 +823,16 @@ export function RecurringTab() {
             `${METHOD_LABELS[r.payment_method] ?? r.payment_method} · ${names.owner(r.card_id ?? r.account_id)}`,
         },
         {
+          header: "Divisão",
+          cell: (r: RecurringPurchase) =>
+            describeSplit(r.allocations, r.allocation_history, current, (a) =>
+              describeAllocation(a, names),
+            ),
+        },
+        {
           header: "Situação",
-          cell: (r: RecurringPurchase) => (r.active ? "ativa" : "pausada"),
+          cell: (r: RecurringPurchase) =>
+            r.active && !pausedIn(r.pauses, current) ? "ativa" : "desativada",
         },
       ]}
       blank={() => ({
@@ -595,6 +841,8 @@ export function RecurringTab() {
         estimated_amount: "",
         every_value: 30,
         every_unit: "days",
+        repeat: "interval",
+        day: null,
         last_date: "",
         payment_method: "credit",
         card_id: null,
@@ -602,6 +850,10 @@ export function RecurringTab() {
         category_id: null,
         allocations: null,
         active: true,
+        prices: [],
+        pauses: [],
+        splits: [],
+        group: "purchase",
       })}
       fromItem={(r) => ({
         description: r.description,
@@ -609,6 +861,9 @@ export function RecurringTab() {
         estimated_amount: moneyToInput(r.estimated_amount),
         every_value: r.every.value,
         every_unit: r.every.unit,
+        repeat:
+          r.every.unit === "months" && r.every.value === 1 ? "day" : "interval",
+        day: Number(r.last_date.slice(8, 10)),
         last_date: r.last_date,
         payment_method: r.payment_method,
         card_id: r.card_id,
@@ -616,18 +871,33 @@ export function RecurringTab() {
         category_id: r.category_id,
         allocations: r.allocations,
         active: r.active,
+        prices: toPriceDrafts(r.price_history),
+        pauses: toPauseDrafts(r.pauses),
+        splits: toAllocationDrafts(r.allocation_history),
+        group: r.group ?? "purchase",
       })}
       validate={checkRecurring}
       toBody={(d) => ({
         description: d.description.trim(),
         match_description: orNull(d.match_description),
         estimated_amount: parseMoneyInput(d.estimated_amount) ?? "",
-        every: { value: d.every_value ?? 1, unit: d.every_unit },
-        last_date: d.last_date.trim(),
+        // R14.30: "todo dia X" = every month, anchored on day X of the given date's month
+        every:
+          d.repeat === "day"
+            ? { value: 1, unit: "months" as const }
+            : { value: d.every_value ?? 1, unit: d.every_unit },
+        last_date:
+          d.repeat === "day" && d.day
+            ? withDay(d.last_date.trim(), d.day)
+            : d.last_date.trim(),
         ...paymentBody(d),
         category_id: d.category_id,
         allocations: d.allocations,
         active: d.active,
+        price_history: toPrices(d.prices),
+        pauses: toPauses(d.pauses),
+        allocation_history: toAllocationHistory(d.splits),
+        group: d.group,
       })}
       form={RecurringForm}
     />

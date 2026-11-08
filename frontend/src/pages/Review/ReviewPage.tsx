@@ -41,6 +41,7 @@ import {
   sumMoney,
 } from "../../lib/format";
 import { ApiError } from "../../api/client";
+import { useDefaultSplit } from "../../components/defaultSplit";
 import {
   allocationText,
   isChoice,
@@ -442,6 +443,8 @@ function ReviewFileCard({
         {editingSplit && (
           <SplitEditor
             initial={editingSplit.allocations}
+            cardId={editingSplit.card_id}
+            accountId={editingSplit.account_id}
             onApply={(allocations) => {
               edit({ id: editingSplit.id, allocations });
               setEditingSplit(null);
@@ -456,15 +459,24 @@ function ReviewFileCard({
 function SplitEditor({
   initial,
   onApply,
+  cardId,
+  accountId,
 }: {
   initial: Allocation | null;
   onApply: (a: Allocation | null) => void;
+  cardId: string | null;
+  accountId: string | null;
 }) {
   const [value, setValue] = useState<Allocation | null>(initial);
+  const defaultHint = useDefaultSplit(cardId, accountId);
   const valid = allocationValid(value);
   return (
     <Stack>
-      <AllocationPicker value={value} onChange={setValue} />
+      <AllocationPicker
+        value={value}
+        onChange={setValue}
+        defaultHint={defaultHint}
+      />
       <Group justify="flex-end">
         <Button disabled={!valid} onClick={() => onApply(value)}>
           Aplicar

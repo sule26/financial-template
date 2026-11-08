@@ -7,6 +7,7 @@ import {
   Text,
   UnstyledButton,
 } from "@mantine/core";
+import { T } from "../i18n/i18n";
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconBuildingBank,
@@ -17,6 +18,7 @@ import {
   IconHeartbeat,
   IconHelpCircle,
   IconLayoutDashboard,
+  IconHome,
   IconListDetails,
   IconSettings,
   IconUsersGroup,
@@ -45,6 +47,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: "/lancamentos",
     label: "Lançamentos",
     icon: IconListDetails,
+    group: "Movimento",
+  },
+  {
+    to: "/contas-da-casa",
+    label: "Contas da casa",
+    icon: IconHome,
     group: "Movimento",
   },
   { to: "/revisao", label: "Revisão", icon: IconChecklist, group: "Movimento" },
@@ -100,7 +108,7 @@ function Wordmark() {
           Gastos
         </Text>
         <Text className="et-wordmark__tag" component="span">
-          finanças da casa
+          <T>controle financeiro</T>
         </Text>
       </div>
     </Group>
@@ -140,7 +148,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       {groups.map((group) => (
         <div key={group} className="et-nav__group">
           <Text className="et-nav__heading" component="div" aria-hidden="true">
-            {group}
+            <T>{group}</T>
           </Text>
           {NAV_ITEMS.filter((i) => i.group === group).map((item) => {
             const active = isActive(item.to, pathname);
@@ -162,7 +170,9 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                   aria-hidden="true"
                   className="et-nav__icon"
                 />
-                <span>{item.label}</span>
+                <span>
+                  <T>{item.label}</T>
+                </span>
               </UnstyledButton>
             );
           })}
@@ -175,8 +185,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 function SidebarFooter() {
   return (
     <Text className="et-sidebar__footer" size="xs">
-      <span className="et-dot-live" aria-hidden="true" /> Offline · dados só
-      nesta máquina
+      <span className="et-dot-live" aria-hidden="true" />{" "}
+      <T>Offline · dados só nesta máquina</T>
     </Text>
   );
 }

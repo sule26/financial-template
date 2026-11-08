@@ -33,7 +33,9 @@
 | **Meio de pagamento** | Crédito, benefício (VR/VA), débito, PIX, transferência, boleto, dinheiro | [16](16-dia-a-dia.md#meios-de-pagamento-r11) |
 | **Benefício** | Conta VR/VA com saldo e créditos do empregador | [16](16-dia-a-dia.md#meios-de-pagamento-r11) |
 | **Lançamento previsto** | Manual com documento; conta até casar com a fatura/extrato | [16](16-dia-a-dia.md#casamento-previsto--importado-r103) |
-| **Compra recorrente** | Compra repetida por intervalo (ex.: 45 dias), reancorada pela compra real | [16](16-dia-a-dia.md#compras-recorrentes-por-intervalo-r12) |
+| **Gasto recorrente** (antes "compra recorrente") | Gasto repetido por intervalo (ex.: 45 dias), reancorado pela compra real; uma conta da casa não é reancorada | [16](16-dia-a-dia.md#compras-recorrentes-por-intervalo-r12) |
+| **Conta da casa** | Gasto recorrente de luz, água, aluguel…: cada ocorrência é um vencimento; o pagamento quita o mês da conta | [16](16-dia-a-dia.md#contas-da-casa-r1426) |
+| **Mudança de divisão** | Divisão nova a partir de um mês numa assinatura ou gasto recorrente (`allocation_history`) | [04](04-modelo-de-dados.md#subscriptionsjson) |
 | **Fatura aberta** | Fatura ainda não fechada (geralmente CSV), válida até a data de exportação | [06](06-perfis-de-banco.md#fatura-aberta-e-formatos-tabulares-csv--r410-r411) |
 | **Documento ativo** | O único arquivo de fatura que vale para um (cartão, mês) | [05](05-sincronizacao.md#substituição-de-fatura) |
 | **Mês corrente (C)** | Mês do calendário pela data real; toda tela abre nele | [07](07-regras-de-negocio.md#mês-em-foco-e-meses-anteriores) |

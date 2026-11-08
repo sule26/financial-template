@@ -16,6 +16,8 @@ interface AllocationPickerProps {
   onChange: (value: Allocation | null) => void;
   label?: string;
   allowEmpty?: boolean; // "padrão" = no explicit allocation (precedence decides)
+  /** R14.16: what "Padrão" resolves to here (e.g. the card owners); shown under the control. */
+  defaultHint?: string | null;
 }
 
 /** Reusable allocation selector: split profile, "só eu", "100% para…", custom (docs/08). */
@@ -24,6 +26,7 @@ export function AllocationPicker({
   onChange,
   label = "Divisão",
   allowEmpty = true,
+  defaultHint,
 }: AllocationPickerProps) {
   const names = useNames();
   const labelId = useId();
@@ -90,6 +93,13 @@ export function AllocationPicker({
         onChange={setMode}
         aria-labelledby={labelId}
       />
+      {mode === "default" && (
+        <Text size="xs" c="dimmed" data-testid="default-split-hint">
+          {defaultHint
+            ? `Padrão = ${defaultHint}. Uma regra que case com a compra pode mudar isso.`
+            : "Padrão = uma regra que case com a compra ou, sem regra, os donos do cartão/conta."}
+        </Text>
+      )}
       {mode === "split" && isSplitRef(value) && (
         <Select
           aria-label="Padrão de divisão"

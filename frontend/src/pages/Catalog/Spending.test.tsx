@@ -112,7 +112,27 @@ describe("Categories tab", () => {
       name: "Pets",
       color: "#AA22CC",
       budget: "300.50",
+      description: null,
     });
+  });
+
+  it("r14_24 a category explains what goes in it, in the list and in the picker", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/categories": [
+        {
+          id: "cat_casa",
+          name: "Casa",
+          color: "#2F9E44",
+          budget: null,
+          description: "Contas da casa: luz, água",
+        },
+      ],
+    });
+    open("categorias");
+    expect(
+      await screen.findByText("Contas da casa: luz, água"),
+    ).toBeInTheDocument();
   });
 
   it("r1_12 deleting a category in use shows uncategorized count", async () => {
@@ -202,6 +222,21 @@ describe("Savings goals tab", () => {
 });
 
 describe("Subscriptions tab", () => {
+  it("r14_16 'Padrão' says who the default split is (the card owners)", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/subscriptions": [{ ...SUBSCRIPTION, allocations: null }],
+    });
+    open("assinaturas");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Netflix" }),
+    );
+    const modal = await screen.findByRole("dialog");
+    expect(
+      await within(modal).findByTestId("default-split-hint"),
+    ).toHaveTextContent("Padrão = donos do cartão Cartão X — Eu 100%");
+  });
+
   it("r1_4 lists subscriptions", async () => {
     mockApi({
       ...CATALOG,
@@ -269,7 +304,7 @@ describe("Subscriptions tab", () => {
       "debit",
     );
     await userEvent.selectOptions(
-      within(modal).getByLabelText(/^Conta/),
+      within(modal).getByRole("combobox", { name: /^Conta/ }),
       "acc_x",
     );
     await save(modal);
@@ -295,6 +330,11 @@ describe("Subscriptions tab", () => {
       end_month: null,
       category_id: "cat_lazer",
       allocations: null,
+      price_history: [],
+      pauses: [],
+      allocation_history: [],
+      group: "subscription",
+      due_day: null,
     });
   });
 
@@ -350,7 +390,7 @@ describe("Recurring purchases tab", () => {
       }),
     });
     open("recorrentes");
-    await screen.findByText("Nenhuma compra recorrente cadastrada.");
+    await screen.findByText("Nenhum gasto recorrente cadastrado.");
     await userEvent.click(screen.getByRole("button", { name: "Novo" }));
     const modal = await dialog();
     await userEvent.type(within(modal).getByLabelText(/^Descrição/), "Ração");
@@ -378,7 +418,9 @@ describe("Recurring purchases tab", () => {
       within(modal).getByLabelText(/^Data da última compra/),
       "2026-09-01",
     );
-    await userEvent.click(within(modal).getByLabelText("Ativa"));
+    await userEvent.click(
+      within(modal).getByRole("switch", { name: /^Ativa/ }),
+    );
     await save(modal);
     await waitFor(() => expect(lastBody(calls, "POST")).toBeDefined());
     expect(lastBody(calls, "POST")).toEqual({
@@ -393,6 +435,10 @@ describe("Recurring purchases tab", () => {
       category_id: null,
       allocations: null,
       active: false,
+      price_history: [],
+      pauses: [],
+      allocation_history: [],
+      group: "purchase",
     });
   });
 
@@ -505,6 +551,55 @@ describe("Rules tab", () => {
     expect(lastBody(calls, "PUT")).toMatchObject({
       enabled: false,
       when: { min_amount: null, card_id: "card_x" },
+    });
+  });
+});
+
+describe("recurring purchase help (R14.14)", () => {
+  it("r14_14 the last purchase date explains it is a purchase that already happened", async () => {
+    mockApi({ ...CATALOG, "GET /api/recurring-purchases": [] });
+    open("recorrentes");
+    await userEvent.click(await screen.findByRole("button", { name: "Novo" }));
+    const modal = await screen.findByRole("dialog");
+    expect(
+      within(modal).getByText(/A última vez que a compra aconteceu de verdade/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("gastos recorrentes: próxima data e todo dia X (R14.30)", () => {
+  it("r14_30 'Próxima' shows the planned next date, not only a postponed one", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/recurring-purchases": [{ ...RECURRING, next_date: null }],
+    });
+    open("recorrentes");
+    const row = (await screen.findByText("Ração dos gatos")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(within(row).getByText("16/10/2026")).toBeInTheDocument(); // 01/09 + 45 dias
+  });
+
+  it("r14_30 'Todo dia X do mês' saves monthly anchored on that day", async () => {
+    const { calls } = mockApi({
+      ...CATALOG,
+      "GET /api/recurring-purchases": [RECURRING],
+      "PUT /api/recurring-purchases/rec_racao": (body: unknown) => body,
+    });
+    open("recorrentes");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Ração dos gatos" }),
+    );
+    const modal = await dialog();
+    await userEvent.click(within(modal).getByLabelText("Todo dia X do mês"));
+    const day = within(modal).getByLabelText(/^Dia do mês/);
+    await userEvent.clear(day);
+    await userEvent.type(day, "31");
+    await save(modal);
+    await waitFor(() => expect(lastBody(calls, "PUT")).toBeDefined());
+    expect(lastBody(calls, "PUT")).toMatchObject({
+      every: { value: 1, unit: "months" },
+      last_date: "2026-08-31", // no 31/09: anchored on 31/08 so October is 31/10
     });
   });
 });

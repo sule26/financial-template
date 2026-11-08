@@ -71,7 +71,7 @@ Relativo a `H(cartão do plano)`:
 | `cancelado` | `status_override.status = cancelled` (exibe a partir de qual parcela) |
 | (antecipada no banco) | `status_override.status = anticipated_at_bank`: parcelas `n..N` saem da projeção; o status segue as regras abaixo com o cronograma restante |
 | `pago` | Todas as cobranças do cronograma em meses `< H` |
-| `quase acabando` | Restam 1 ou 2 cobranças em meses `≥ H` |
+| `terminando` | Restam 1, 2 ou 3 cobranças em meses `≥ H` (R14.19) |
 | `em andamento` | Restam 3 ou mais |
 
 Uma antecipação conta como **uma** cobrança.
@@ -175,6 +175,16 @@ principal, porque a fatura é uma só) e por cartão de benefício (conta tipo B
 dinheiro (débito, PIX, boleto, transferência, dinheiro) ficam fora da tabela, dos itens do mês, do gráfico
 por categoria e do total, que se chama "Total dos cartões"; esses gastos aparecem no Resumo. A renda
 comprometida da projeção (R1.9) continua contando tudo o que a pessoa gastou, inclusive nas contas.
+**Pessoas** (R14.25): Resumo e Projeção aceitam uma ou várias pessoas (ex.: eu + esposa: partes e
+rendas somadas) e abrem com a pessoa padrão escolhida em Configurações (guardada no navegador; vazio =
+a casa); A receber abre como a primeira delas. A API recebe `user_id=usr_eu,usr_ana`.
+
+**A receber por pessoa e período** (R14.28): as abas **Pessoa** ("Todas" ou uma por pessoa) mostram só o
+que aquela pessoa tem que pagar, confirmado em aberto e previsto, e filtram também os saldos e **Vencimento** escolhe este mês, o próximo mês (padrão) ou todos em
+aberto (pela data limite; sem data limite, pelo mês da fatura). Com todas as pessoas, um cartão por pessoa
+mostra quanto ela te deve / você deve e, clicando, filtra só ela. O **Previsto** usa a mesma pessoa e
+agrupa este mês e os 2 próximos por mês e por pessoa.
+
 Com uma pessoa selecionada, a tabela e a lista de itens mostram só a parte dela (o item exibe "de R$ X",
 o valor inteiro, quando a parte é menor). API: `GET /api/reports/month-items?cards_only=true&user_id=…`.
 
@@ -195,7 +205,7 @@ o valor inteiro, quando a parte é menor). API: `GET /api/reports/month-items?ca
 | Painel | Cálculo |
 |--------|---------|
 | Pizza por categoria | Σ gasto do mês selecionado por categoria; itens sem categoria (R1.12) aparecem como "Sem categoria" |
-| Gasto x renda | Por mês: gasto do usuário selecionado (sua parte) vs renda vigente dele; sem pessoa selecionada, gasto total vs **renda da casa** (soma da renda de todos os usuários, R14.6) |
+| Gasto x renda | Por mês: gasto das pessoas selecionadas (suas partes) vs renda vigente delas; sem pessoa selecionada, gasto total vs **renda da casa** (soma da renda de todos os usuários, R14.6) |
 | Empilhado por cartão | Por mês: Σ gasto por cartão; cada conta aparece como uma série |
 | Por meio de pagamento (R11.4) | Por mês: Σ gasto por `payment_method` (crédito, benefício, débito/PIX/transferência/boleto, dinheiro); filtro disponível em todos os painéis |
 | Resumo anual | Σ gasto por categoria × mês do ano selecionado, com total |

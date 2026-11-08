@@ -4,7 +4,7 @@
  * Money stays a decimal string everywhere except when it is handed to Recharts, which can only plot
  * numbers; labels and tooltips are always rendered from the original string via formatMoney.
  */
-import { Select, Switch } from "@mantine/core";
+import { MultiSelect, Select, Switch } from "@mantine/core";
 import { CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { useList } from "../../api/hooks";
 import type { Commitment } from "../../api/types";
@@ -153,6 +153,39 @@ export function PersonSelect({
       w={200}
     />
   );
+}
+
+/**
+ * R14.25: one or more people (e.g. me and my wife); empty = everybody. The page starts with
+ * the default people chosen in Configurações.
+ */
+export function PeopleSelect({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const users = useList("users");
+  return (
+    <MultiSelect
+      label="Pessoas"
+      placeholder={value.length ? undefined : "Todos"}
+      data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+      value={value}
+      onChange={onChange}
+      clearable
+      w={280}
+    />
+  );
+}
+
+/** "Eu", "Eu + Ana": the name of a selection of people (null when nobody = everybody). */
+export function peopleName(
+  ids: string[],
+  users: Record<string, string>,
+): string | null {
+  return ids.length ? ids.map((id) => users[id] ?? id).join(" + ") : null;
 }
 
 /** R5.5: unconfirmed (Review) items are hidden by default. */

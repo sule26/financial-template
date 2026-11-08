@@ -11,7 +11,7 @@ Lista completa, com origem e requisito correspondente em
 |----------------|---------|------|
 | Vários cartões | Nome, dono(s), responsável, conta vinculada, dia de fechamento, dia de vencimento, limite | R1.1 |
 | Parcelamentos | Parcelas distribuídas automaticamente nos meses de fatura | R1.2 |
-| Status do parcelamento | `pago`, `quase acabando` (≤ 2 restantes), `em andamento` | R1.3 |
+| Status do parcelamento | `pago`, `terminando` (≤ 3 restantes), `em andamento`; quanto falta, valor por mês, editar; terminados escondidos | R1.3, R14.19–R14.21 |
 | Assinaturas | Mensais e anuais | R1.4 |
 | Histórico de renda | Mudança de salário vale a partir de um mês, sem alterar o passado | R1.5 |
 | Gastos por categoria | Gráfico de pizza | R1.6 |
@@ -57,7 +57,7 @@ Lista completa, com origem e requisito correspondente em
 
 Orçamento por categoria com alertas · limite comprometido por cartão · detecção automática de
 assinaturas · economia com antecipações · fluxo de caixa mensal · relatório por pessoa (PDF/CSV) ·
-backup versionado de `data/` · compras internacionais (IOF/câmbio).
+backup versionado de `data/`.
 
 Para adicionar uma ideia: crie o requisito em `requirements.md`, a task em `tasks.md` e siga o
 [processo](10-processo-de-desenvolvimento.md).

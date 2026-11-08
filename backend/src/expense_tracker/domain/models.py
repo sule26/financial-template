@@ -314,6 +314,8 @@ class Category(Model):
     name: str = Field(min_length=1)
     color: str = "#868E96"
     budget: Money | None = None
+    # R14.24: what goes in this category, shown when choosing it
+    description: str | None = None
 
 
 class SavingsGoal(Model):
@@ -352,6 +354,9 @@ class PaidInvoice(Model):
 
 class Links(Model):
     subscription_id: str | None = None
+    # R14.26: the bill month this entry pays (may differ from invoice_month: card, late payment)
+    subscription_month: Month | None = None
+    recurring_month: Month | None = None
     recurring_purchase_id: str | None = None
     investment_id: str | None = None
     settlement_id: str | None = None
@@ -500,6 +505,33 @@ def paused_in(pauses: list[Pause], month: str) -> bool:
     )
 
 
+class AllocationEntry(Model):
+    """R14.27: the split from a month on (e.g. bills shared with my partner from January)."""
+
+    from_month: Month
+    allocations: Allocation | None = None  # None = back to "Padrão" (the owners)
+
+    _check_alloc = field_validator("allocations")(classmethod(lambda cls, v: check_allocation(v)))
+
+
+def allocation_in(
+    base: Allocation | None, history: list[AllocationEntry], month: str
+) -> Allocation | None:
+    """Split in force in ``month``: latest entry with ``from_month <= month``, else the base."""
+    chosen = base
+    for entry in sorted(history, key=lambda e: e.from_month):
+        if entry.from_month <= month:
+            chosen = entry.allocations
+    return chosen
+
+
+def _distinct_allocations(history: list[AllocationEntry]) -> list[AllocationEntry]:
+    months = [e.from_month for e in history]
+    if len(set(months)) != len(months):
+        raise ValueError("allocation history must have distinct from_month")
+    return history
+
+
 def _distinct_prices(history: list[PriceEntry]) -> list[PriceEntry]:
     months = [e.from_month for e in history]
     if len(set(months)) != len(months):
@@ -522,6 +554,9 @@ class Subscription(Model):
     allocations: Allocation | None = None
     # R14.9: price changes (reajustes) from a month on; ``amount`` is the price before them.
     price_history: list[PriceEntry] = Field(default_factory=list)
+    # R14.26: "household" = conta da casa (luz, água, aluguel…), shown in Contas da casa
+    group: Literal["subscription", "household"] = "subscription"
+    due_day: int | None = Field(default=None, ge=1, le=31)
 
     _check_prices = field_validator("price_history")(
         classmethod(lambda cls, v: _distinct_prices(v))
@@ -535,6 +570,16 @@ class Subscription(Model):
 
     def paused_in(self, month: str) -> bool:
         return paused_in(self.pauses, month)
+
+    # R14.27: split changes from a month on (``allocations`` is the split before them)
+    allocation_history: list[AllocationEntry] = Field(default_factory=list)
+
+    _check_alloc_history = field_validator("allocation_history")(
+        classmethod(lambda cls, v: _distinct_allocations(v))
+    )
+
+    def allocations_in(self, month: str) -> Allocation | None:
+        return allocation_in(self.allocations, self.allocation_history, month)
 
     _check_alloc = field_validator("allocations")(classmethod(lambda cls, v: check_allocation(v)))
 
@@ -576,6 +621,9 @@ class RecurringPurchase(Model):
     next_date: dt.date | None = None
     # R14.9: estimated price from a month on (month of the purchase date).
     price_history: list[PriceEntry] = Field(default_factory=list)
+    # R14.26: "household" = conta da casa (luz, água, aluguel…): the occurrence date is the due
+    # date, paying it does not move the schedule, and it shows in Contas da casa.
+    group: Literal["purchase", "household"] = "purchase"
 
     _check_prices = field_validator("price_history")(
         classmethod(lambda cls, v: _distinct_prices(v))
@@ -589,6 +637,16 @@ class RecurringPurchase(Model):
 
     def paused_in(self, month: str) -> bool:
         return paused_in(self.pauses, month)
+
+    # R14.27: split changes from a month on (``allocations`` is the split before them)
+    allocation_history: list[AllocationEntry] = Field(default_factory=list)
+
+    _check_alloc_history = field_validator("allocation_history")(
+        classmethod(lambda cls, v: _distinct_allocations(v))
+    )
+
+    def allocations_in(self, month: str) -> Allocation | None:
+        return allocation_in(self.allocations, self.allocation_history, month)
 
     _check_alloc = field_validator("allocations")(classmethod(lambda cls, v: check_allocation(v)))
 

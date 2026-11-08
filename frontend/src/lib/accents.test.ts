@@ -95,3 +95,36 @@ describe("accents", () => {
     }
   });
 });
+
+describe("banknote, logo and favicon follow the accent (R14.18)", () => {
+  it("r14_18 every accent sets the banknote colours in both schemes", () => {
+    for (const a of ACCENTS) {
+      const vars = accentVariables(a);
+      for (const scheme of [vars.light, vars.dark]) {
+        expect(scheme["--et-note-from"]).toBe(a.palette[8]);
+        expect(scheme["--et-note-to"]).toBe(a.palette[9]);
+      }
+    }
+  });
+
+  it("r14_18 the banknote text keeps AA contrast on every accent", () => {
+    for (const a of ACCENTS) {
+      // --et-note-ink (cream) on the darker and the lighter end of the banknote gradient
+      expect(
+        contrast(rgb("#f1e6c8"), rgb(a.palette[8])),
+      ).toBeGreaterThanOrEqual(AA);
+      expect(
+        contrast(rgb("#f1e6c8"), rgb(a.palette[9])),
+      ).toBeGreaterThanOrEqual(AA);
+    }
+  });
+
+  it("r14_18 applyAccent paints the favicon with the accent coin", async () => {
+    const { applyAccent, faviconSvg } = await import("../hooks/accent");
+    applyAccent("ruby");
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const ruby = ACCENTS.find((a) => a.id === "ruby")!.palette[8];
+    expect(link?.href).toContain(encodeURIComponent(ruby));
+    expect(faviconSvg("#123456")).toContain('fill="#123456"');
+  });
+});

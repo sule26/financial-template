@@ -143,17 +143,21 @@ export function accentVariables(accent: Accent): {
   dark: Record<string, string>;
 } {
   const p = accent.palette;
+  // R14.18: the Resumo banknote and the logo coin follow the accent too.
+  const note = { "--et-note-from": p[8], "--et-note-to": p[9] };
   return {
     light: {
       "--et-jade": p[7],
       "--et-jade-tint": p[0],
       "--et-bg-glow-1": hexAlpha(p[7], 0.09),
       [`--mantine-color-${accent.id}-light-color`]: p[7],
+      ...note,
     },
     dark: {
       "--et-jade": p[4],
       "--et-jade-tint": hexAlpha(p[4], 0.14),
       "--et-bg-glow-1": hexAlpha(p[4], 0.1),
+      ...note,
     },
   };
 }

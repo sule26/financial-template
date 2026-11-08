@@ -71,7 +71,7 @@ export function AlertsBanner() {
               key={i}
               color="yellow"
               icon={IconCalendarRepeat}
-              title="Compra recorrente não apareceu"
+              title="Gasto recorrente não apareceu"
             >
               {a.description} prevista em {formatDate(a.planned_date)}.{" "}
               <Anchor component={Link} to="/lancamentos?tab=recorrentes">

@@ -75,7 +75,7 @@ const USE: Topic[] = [
   },
   {
     value: "dia-a-dia",
-    title: "Dia a dia: lançamento rápido e compras recorrentes",
+    title: "Dia a dia: lançamento rápido e gastos recorrentes",
     body: (
       <List spacing={4}>
         <List.Item>
@@ -88,7 +88,7 @@ const USE: Topic[] = [
           para ela. Dinheiro é definitivo na hora.
         </List.Item>
         <List.Item>
-          Compras recorrentes (ex.: ração a cada 45 dias) geram a próxima
+          Gastos recorrentes (ex.: ração a cada 45 dias) geram a próxima
           ocorrência prevista e entram na projeção.
         </List.Item>
       </List>

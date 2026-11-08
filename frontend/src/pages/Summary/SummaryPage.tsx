@@ -46,6 +46,7 @@ import {
   type StatDelta,
 } from "../../components/ui";
 
+import { readDefaultPeople } from "../../hooks/defaultPeople";
 import { formatMonth, useMonth } from "../../hooks/month";
 import { formatMoney, METHOD_LABELS, sumMoney } from "../../lib/format";
 import {
@@ -56,7 +57,8 @@ import {
   METHOD_FILTER_OPTIONS,
   Panel,
   PendingSwitch,
-  PersonSelect,
+  PeopleSelect,
+  peopleName,
   plotValue,
   StateBadge,
   useCategoryInfo,
@@ -94,7 +96,9 @@ function serialOf(month: string): string {
 
 export function SummaryPage() {
   const { selected } = useMonth();
-  const [userId, setUserId] = useState<string | null>(null);
+  // R14.25: starts with the default people of Configurações; several = their parts summed
+  const [people, setPeople] = useState<string[]>(readDefaultPeople);
+  const userId = people.length ? people.join(",") : null;
   const [method, setMethod] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -109,7 +113,7 @@ export function SummaryPage() {
     summaryPath,
   );
   const names = useNames();
-  const personName = userId ? (names.users[userId] ?? userId) : null;
+  const personName = peopleName(people, names.users);
   const projectionPath = `/api/reports/projection${buildQuery({
     user_id: userId,
     include_pending: pending,
@@ -127,7 +131,7 @@ export function SummaryPage() {
         icon={<IconLayoutDashboard size={22} stroke={1.7} />}
         subtitle={`Para onde foi o dinheiro em ${formatMonth(selected)}.`}
       >
-        <PersonSelect value={userId} onChange={setUserId} />
+        <PeopleSelect value={people} onChange={setPeople} />
         <Select
           label="Meio de pagamento"
           placeholder="Todos"

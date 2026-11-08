@@ -28,10 +28,14 @@ METHOD_GROUPS: dict[PaymentMethod, str] = {
 }
 
 
-def amount_for(ledger: Ledger, item: LedgerItem, user_id: str | None) -> Decimal:
+def amount_for(ledger: Ledger, item: LedgerItem, user_id: str | Iterable[str] | None) -> Decimal:
+    """Whole item without a person; else the part of the person (or the sum for a group,
+    R14.25: e.g. me and my wife together)."""
     if user_id is None:
         return item.amount
-    return ledger.parts_of(item).get(user_id, ZERO)
+    parts = ledger.parts_of(item)
+    ids = [user_id] if isinstance(user_id, str) else list(user_id)
+    return sum((parts.get(u, ZERO) for u in ids), ZERO)
 
 
 def is_card_item(ledger: Ledger, item: LedgerItem) -> bool:
@@ -68,11 +72,13 @@ class MonthSummary:
 def summarize(
     ledger: Ledger,
     view: MonthView,
-    user: User | None = None,
+    user: User | Sequence[User] | None = None,
     method_group: str | None = None,
 ) -> MonthSummary:
-    """Totals of one month view; with ``user`` each item counts only that user's part."""
-    uid = user.id if user else None
+    """Totals of one month view; with ``user`` each item counts only that user's part (with
+    several users, the sum of their parts, R14.25)."""
+    people = _group(user)
+    uid = [u.id for u in people] if people is not None else None
     by_cat: dict[str, Decimal] = defaultdict(lambda: ZERO)
     by_card: dict[str, Decimal] = defaultdict(lambda: ZERO)
     by_method: dict[str, Decimal] = defaultdict(lambda: ZERO)
@@ -103,14 +109,20 @@ def summarize(
     )
 
 
-def _income(ledger: Ledger, month: str, user: User | None, *, benefit: bool) -> Decimal | None:
-    """Income of the person; with no person, of the household (sum of every user, R14.6)."""
+def _group(user: User | Sequence[User] | None) -> list[User] | None:
+    if user is None:
+        return None
+    return [user] if isinstance(user, User) else list(user)
+
+
+def _income(
+    ledger: Ledger, month: str, user: User | Sequence[User] | None, *, benefit: bool
+) -> Decimal | None:
+    """Income of the person(s); with no person, of the household (sum of every user, R14.6)."""
     benefits = ledger.s.benefits
-    if user is not None:
-        return income_for(user, month, benefit=benefit, benefits=benefits)
-    values = [
-        income_for(u, month, benefit=benefit, benefits=benefits) for u in ledger.s.users.values()
-    ]
+    group = _group(user)
+    people = group if group is not None else list(ledger.s.users.values())
+    values = [income_for(u, month, benefit=benefit, benefits=benefits) for u in people]
     present = [v for v in values if v is not None]
     return sum(present, ZERO) if present else None
 
@@ -204,6 +216,16 @@ def invoice_due_date(ledger: Ledger, main_card: str, month: str) -> date | None:
     return due_date_of_month(card.billing_history, month)
 
 
+def linked_card(ledger: Ledger, account_id: str) -> str | None:
+    """Main card linked to an account (first by id when there are several), R14.22."""
+    cards = sorted(
+        c.id
+        for c in ledger.s.cards.values()
+        if c.account_id == account_id and c.parent_card_id is None
+    )
+    return cards[0] if cards else None
+
+
 @dataclass
 class Balances:
     """``net[(a, b)] > 0`` means b owes a."""
@@ -243,7 +265,10 @@ class Balances:
 
 
 def balances(
-    ledger: Ledger, views: Iterable[MonthView], settlements: Sequence[Settlement]
+    ledger: Ledger,
+    views: Iterable[MonthView],
+    settlements: Sequence[Settlement],
+    forecasts: bool = False,
 ) -> Balances:
     """Debts from spending items (docs/08 "Saldos").
 
@@ -252,7 +277,8 @@ def balances(
     debtor's collector ("repassar para", R13.11) when set; a collector who is not that payer
     owes the same amount on to the payer (R13.14, same card/account, due date and month). Pure
     forecasts (plans, subscriptions, recurring) are not debts yet; transactions (imported or
-    manual) are.
+    manual) are. With ``forecasts=True`` only the forecasts are taken: what people are
+    expected to owe once the invoices arrive (R14.15, "Previsto").
     """
     result = Balances(settlements=list(settlements))
     users = ledger.s.users
@@ -261,7 +287,7 @@ def balances(
         if any(state == "missing" for state in view.states.values()):
             result.incomplete_months.add(view.month)
         for item in view.items:
-            if not item.counts_as_spending or item.is_forecast:
+            if not item.counts_as_spending or item.is_forecast != forecasts:
                 continue
             card_id = ledger.main_card(item.card_id) if item.card_id else None
             account_id = None if card_id else item.account_id
@@ -271,6 +297,21 @@ def balances(
                 if key not in due_cache:
                     due_cache[key] = invoice_due_date(ledger, card_id, view.month)
                 due = due_cache[key]
+            elif account_id is not None:
+                # R14.22: PIX/débito on an account with a card is settled together with that
+                # card's invoice: the deadline is the due date of the invoice where a card
+                # purchase on the same day would fall (so it is never already past when made).
+                linked = linked_card(ledger, account_id)
+                if linked is not None:
+                    inv = (
+                        ledger.month_for_card_date(linked, item.purchase_date)
+                        if item.purchase_date is not None
+                        else view.month
+                    )
+                    key = (linked, inv)
+                    if key not in due_cache:
+                        due_cache[key] = invoice_due_date(ledger, linked, inv)
+                    due = due_cache[key]
             for uid, value in ledger.parts_of(item).items():
                 if value == ZERO:
                     continue
@@ -371,7 +412,13 @@ def receivables(bal: Balances, user_id: str, today: date) -> list[Receivable]:
             continue
         key = (other, line.card_id, line.account_id, line.month)
         groups[key] += sign * line.amount
-        dues[key] = line.due_date
+        # the group's deadline: the latest of its lines (PIX on different days of the month)
+        prev = dues.get(key)
+        dues[key] = (
+            line.due_date
+            if prev is None or (line.due_date is not None and line.due_date > prev)
+            else prev
+        )
     out: list[Receivable] = []
     for key, net in groups.items():
         if net == ZERO:

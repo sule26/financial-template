@@ -321,7 +321,9 @@ def _ownership(repo: Repository, tx: Transaction) -> Ownership:
     return resolve_account(acc)
 
 
-def _linked_defaults(repo: Repository, suggestion: Suggestion | None) -> LinkedDefaults | None:
+def _linked_defaults(
+    repo: Repository, suggestion: Suggestion | None, month: str, purchase_date: date | None = None
+) -> LinkedDefaults | None:
     if suggestion is None or suggestion.target_id is None:
         return None
     if suggestion.type in (
@@ -338,11 +340,22 @@ def _linked_defaults(repo: Repository, suggestion: Suggestion | None) -> LinkedD
     if suggestion.type == "link_subscription":
         sub = repo.get("subscriptions", suggestion.target_id)
         if sub:
-            return LinkedDefaults(f"subscription:{sub.id}", sub.allocations, sub.category_id)
+            return LinkedDefaults(
+                f"subscription:{sub.id}", sub.allocations_in(month), sub.category_id
+            )
     if suggestion.type == "link_recurring":
         rec = repo.get("recurring_purchases", suggestion.target_id)
         if rec:
-            return LinkedDefaults(f"recurring:{rec.id}", rec.allocations, rec.category_id)
+            # R14.27: same month as the forecast (purchase month; a bill's own month)
+            if purchase_date is not None:
+                from expense_tracker.domain.recurrence import bill_month
+
+                month = (
+                    bill_month(rec, purchase_date)
+                    if rec.group == "household"
+                    else month_of(purchase_date)
+                )
+            return LinkedDefaults(f"recurring:{rec.id}", rec.allocations_in(month), rec.category_id)
     if suggestion.type in ("match_manual", "choose_manual"):
         manual = repo.get("transactions", suggestion.target_id)
         if manual:
@@ -382,7 +395,7 @@ def apply_defaults(
         repo.all("rules"),
         manual_allocations=ann.allocations if ann else None,
         manual_category=ann.category_id if ann else None,
-        linked=_linked_defaults(repo, active),
+        linked=_linked_defaults(repo, active, tx.invoice_month, tx.purchase_date),
         last_category_for=last_category,
     )
     update: dict[str, Any] = {
