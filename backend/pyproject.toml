@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools==84.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "expense-tracker"
+version = "0.1.0"
+description = "Personal expense tracker web app (single-user, local, JSON storage)"
+requires-python = "==3.11.*"
+dependencies = [
+    "fastapi==0.143.0",
+    "pydantic==2.14.1",
+    "uvicorn==0.54.0",
+    "pdfplumber==0.11.10",
+    "pypdf==6.21.4",
+    "watchdog==6.0.0",
+    "PyYAML==6.0.3",
+    "starlette==1.7.0",
+    "pdfminer.six==20260107",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pytest-asyncio==1.4.0",
+    "hypothesis==6.169.0",
+    "reportlab==4.2.5",
+    "httpx==0.28.1",
+    "ruff==0.8.4",
+    "mypy==1.14.1",
+    "types-PyYAML==6.0.12.20241230",
+    "pip-audit==2.10.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["expense_tracker"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["expense_tracker"]
+mypy_path = "src"
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["expense_tracker.domain.*", "expense_tracker.storage.*"]
+strict = true
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body"]

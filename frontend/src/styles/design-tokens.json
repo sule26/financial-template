@@ -1,0 +1,216 @@
+{
+  "brief_summary": "A private, single-user Brazilian expense ledger (offline, one person and their household): its single job is to show where this month's money went and what still needs a decision.",
+  "concept": "Cédula — the month as a banknote. Deep jade ink (the colour of ledger ink and of money, not of fintech mint), a brass guilloché used only on the month's banknote, and green-tinted graphite neutrals so the light and dark themes feel like the same paper under different light.",
+  "colors": [
+    {
+      "name": "paper",
+      "hex": "#F3F6F4",
+      "dark": "#0B1210",
+      "role": "background (page) — cool green-tinted off-white; dark is a green-black, not neutral black"
+    },
+    {
+      "name": "surface",
+      "hex": "#FFFFFF",
+      "dark": "#131C19",
+      "role": "surface (panels, cards, inputs)"
+    },
+    {
+      "name": "ink",
+      "hex": "#15201C",
+      "dark": "#E4EBE8",
+      "role": "primary text"
+    },
+    {
+      "name": "jade",
+      "hex": "#0E6B55",
+      "dark": "#43B592",
+      "role": "primary (actions, active navigation, income/positive)"
+    },
+    {
+      "name": "brass",
+      "hex": "#8A6A22",
+      "dark": "#E0B864",
+      "role": "accent (used once: the month banknote guilloché + its serial line)"
+    },
+    {
+      "name": "carmine",
+      "hex": "#B4233F",
+      "dark": "#F08196",
+      "role": "negative money, errors, spending series"
+    }
+  ],
+  "typefaces": [
+    {
+      "family": "Bricolage Grotesque Variable",
+      "role": "display",
+      "fallback_stack": "'Manrope Variable', system-ui, sans-serif",
+      "used_for": "page titles, panel titles, the banknote total and KPI values (tabular figures)"
+    },
+    {
+      "family": "Manrope Variable",
+      "role": "body",
+      "fallback_stack": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+      "used_for": "body, labels, navigation, tables; money always with font-variant-numeric: tabular-nums"
+    }
+  ],
+  "layout_concept": {
+    "prose": "A ledger spine on the left (grouped navigation with a sliding jade marker), a frosted header carrying the month like a page tab, and a dashboard that opens on the month's banknote before any chart.",
+    "ascii_wireframe": "+---------+------------------------------------------------+\n| ◈ Gastos| [≡]   ‹  out/2026  ›    [+ Lançamento] [☀ ☾ ◐]  |\n| VISÃO   +------------------------------------------------+\n|▌Resumo  | Resumo                          [filtros]      |\n| Projeção| +-----------------------------+ +------------+ |\n| MOVIM.  | | ◎◎ TOTAL DO MÊS  (guilloché)| | Renda      | |\n| Lançam. | | R$ 1.500,00  ↑ vs set      | +------------+ |\n| Revisão | | OUT·2026 · real/aberta     | | Maior cat. | |\n| ...     | +-----------------------------+ +------------+ |\n| CONFIG. | [ panel ][ panel ]  charts, tables              |\n+---------+------------------------------------------------+"
+  },
+  "signature_element": {
+    "description": "The month banknote: the Resumo hero card is a jade note with a brass guilloché rosette (the fine-line security pattern of real banknotes), a serial-like month code and the total counting up once.",
+    "why_this_brief": "The app is literally about where the month's reais went; a banknote is the one object every user already reads as 'this month's money'. It is specific to money/BRL and would look wrong pasted into an unrelated brief."
+  },
+  "motion": {
+    "orchestrated_moment": "Page enter: content fades and rises 8px (260ms, cubic-bezier(.2,.7,.2,1)); cards follow with a 45ms stagger; the banknote total counts up over 700ms.",
+    "micro": "Cards lift 2px on hover, buttons press to scale .98, the nav marker slides between items, skeletons shimmer while loading, charts grow in once.",
+    "reduced_motion": "prefers-reduced-motion: reduce (and any environment where '(prefers-reduced-motion: no-preference)' does not match, e.g. jsdom) renders the final state immediately: no count-up, no chart animation, CSS animations/transitions at 0.01ms."
+  },
+  "self_critique": {
+    "would_i_default_to_this_for_any_similar_brief": "Partly: 'green for money' is a default. Revised away from fintech mint (#00C896-like) to a deep ink jade, added the brass guilloché so the green reads as banknote ink, and tinted the greys green so the system is not slate.",
+    "cliches_checked": {
+      "warm_cream_serif_terracotta": false,
+      "near_black_single_neon_accent": false,
+      "broadsheet_hairline_columns": false,
+      "default_shadcn_tailwind_look": false,
+      "generic_purple_blue_gradient_blobs": false,
+      "generic_outline_icon_set_everywhere": true
+    },
+    "revision_notes": "The brief pins @tabler/icons-react, so outline icons stay; mitigated with a custom guilloché wordmark glyph, icons set inside tinted squircles instead of bare, and the banknote as the one bold element. Brass restricted to the banknote (nav marker uses jade) per the restraint doctrine."
+  },
+  "contrast_checks": [
+    {
+      "foreground": "#15201C",
+      "background": "#F3F6F4",
+      "usage": "body text on page (light)",
+      "required_ratio": "4.5:1",
+      "result": "15.37:1 PASS"
+    },
+    {
+      "foreground": "#5E6B66",
+      "background": "#FFFFFF",
+      "usage": "dimmed text on surface (light)",
+      "required_ratio": "4.5:1",
+      "result": "5.57:1 PASS"
+    },
+    {
+      "foreground": "#5E6B66",
+      "background": "#F3F6F4",
+      "usage": "dimmed text on page (light)",
+      "required_ratio": "4.5:1",
+      "result": "5.12:1 PASS"
+    },
+    {
+      "foreground": "#FFFFFF",
+      "background": "#0E6B55",
+      "usage": "text on filled primary button (light)",
+      "required_ratio": "4.5:1",
+      "result": "6.46:1 PASS"
+    },
+    {
+      "foreground": "#0E6B55",
+      "background": "#E8F6F1",
+      "usage": "active nav label on jade tint (light)",
+      "required_ratio": "4.5:1",
+      "result": "5.81:1 PASS"
+    },
+    {
+      "foreground": "#B4233F",
+      "background": "#FFFFFF",
+      "usage": "negative money (light)",
+      "required_ratio": "4.5:1",
+      "result": "6.46:1 PASS"
+    },
+    {
+      "foreground": "#8A6A22",
+      "background": "#FFFFFF",
+      "usage": "brass text (light)",
+      "required_ratio": "4.5:1",
+      "result": "5.04:1 PASS"
+    },
+    {
+      "foreground": "#E4EBE8",
+      "background": "#131C19",
+      "usage": "body text on surface (dark)",
+      "required_ratio": "4.5:1",
+      "result": "14.36:1 PASS"
+    },
+    {
+      "foreground": "#93A39C",
+      "background": "#131C19",
+      "usage": "dimmed text on surface (dark)",
+      "required_ratio": "4.5:1",
+      "result": "6.59:1 PASS"
+    },
+    {
+      "foreground": "#FFFFFF",
+      "background": "#0E6B55",
+      "usage": "text on filled primary button (dark: primaryShade.dark = 7, same as light)",
+      "required_ratio": "4.5:1",
+      "result": "6.46:1 PASS"
+    },
+    {
+      "foreground": "#FFFFFF",
+      "background": "#B4233F",
+      "usage": "text on filled red button/badge (both themes, shade 7)",
+      "required_ratio": "4.5:1",
+      "result": "6.46:1 PASS"
+    },
+    {
+      "foreground": "#EED596",
+      "background": "#0F5A47",
+      "usage": "banknote brass label on gradient start (both themes)",
+      "required_ratio": "4.5:1",
+      "result": "5.67:1 PASS"
+    },
+    {
+      "foreground": "#F1E6C8 @ 85%",
+      "background": "#0F5A47",
+      "usage": "banknote hint (both themes)",
+      "required_ratio": "4.5:1",
+      "result": "5.22:1 PASS"
+    },
+    {
+      "foreground": "#5E6B66 / #93A39C",
+      "background": "#FFFFFF / #1E2925",
+      "usage": "input placeholder (light / dark)",
+      "required_ratio": "4.5:1",
+      "result": "5.57:1 / 5.69:1 PASS"
+    },
+    {
+      "foreground": "#43B592",
+      "background": "#131C19",
+      "usage": "jade text/marker on surface (dark)",
+      "required_ratio": "4.5:1",
+      "result": "6.84:1 PASS"
+    },
+    {
+      "foreground": "#F08196",
+      "background": "#131C19",
+      "usage": "negative money (dark)",
+      "required_ratio": "4.5:1",
+      "result": "6.86:1 PASS"
+    },
+    {
+      "foreground": "#E0B864",
+      "background": "#131C19",
+      "usage": "brass text (dark)",
+      "required_ratio": "4.5:1",
+      "result": "9.28:1 PASS"
+    },
+    {
+      "foreground": "#F1E6C8",
+      "background": "#0E5644",
+      "usage": "banknote text on note",
+      "required_ratio": "4.5:1",
+      "result": "6.94:1 PASS"
+    },
+    {
+      "foreground": "#E3C27A",
+      "background": "#0E5644",
+      "usage": "banknote brass label on note",
+      "required_ratio": "4.5:1",
+      "result": "5.04:1 PASS"
+    }
+  ]
+}

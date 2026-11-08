@@ -1,0 +1,10 @@
+# Dev/test image: Python 3.11 + all backend dependencies. Source is bind-mounted at runtime.
+FROM python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /src/backend
+COPY pyproject.toml ./
+RUN mkdir -p src/expense_tracker && touch src/expense_tracker/__init__.py \
+    && pip install -q --upgrade pip==26.2 setuptools==84.1.0 \
+    && pip install -q -e '.[dev]' \
+    && rm -rf src
+ENV PYTHONPATH=/src/backend/src

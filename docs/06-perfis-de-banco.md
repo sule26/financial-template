@@ -42,6 +42,7 @@ transactions:
   installment: '(?P<n>\d{1,2})/(?P<of>\d{1,2})\s*$'   # aplicado à descrição
   ignore: ['PAGAMENTO RECEBIDO', 'SALDO ANTERIOR']
   negative_means: refund         # refund | expense
+  sign: auto                     # auto | minus_is_credit | plus_is_credit | minus_is_debit
   multiline: false               # true: linha sem data é continuação da descrição anterior
   amount_format: br              # br (1.234,56) | us (1,234.56)
 
@@ -57,8 +58,17 @@ classify:
   - {match: 'DESC.*ANTECIP',    tag: anticipation_discount}
 ```
 
-Grupos nomeados obrigatórios em `line`: `date`, `desc`, `amount`. Opcional: `n`, `of` (se a
-parcela vier numa coluna própria).
+Grupos nomeados obrigatórios em `line`: `date`, `desc`, `amount`. Opcionais: `n`, `of` (parcela em
+coluna própria), `sign` (o sinal impresso) e `card_hint` (final do cartão na própria linha).
+
+Convenção de sinal (`sign`): depois do parse, valor **positivo = dinheiro saindo** (compra, débito) e
+**negativo = crédito** (estorno, pagamento recebido, entrada no extrato).
+
+| `sign` | Uso |
+|--------|-----|
+| `auto` / `minus_is_credit` | `-` ou `−` marca crédito (faturas em geral, Nubank) |
+| `plus_is_credit` | `+` marca crédito (Inter) |
+| `minus_is_debit` | Extratos que imprimem débitos com `-`; sem sinal = entrada |
 
 ## Detecção
 
@@ -80,9 +90,12 @@ Resolvida **antes** de calcular fingerprints e antes do staging.
 3. Senão, o único cartão cadastrado com `profile_id` igual ao perfil.
 4. Senão, escolha anterior em `card_choices.json` para este `sha256` ou para (`profile_id`, `card_hint`).
 5. Senão, o arquivo fica `awaiting_card` (R4.8) e a tela Status pede para escolher; a escolha é gravada
-   e o arquivo é reprocessado.
+   e o arquivo é reprocessado. Criar ou editar um cartão/conta também reprocessa os arquivos
+   `awaiting_card` (ex.: o PDF chegou antes de o cartão ser cadastrado).
 
-Final de seção sem cartão cadastrado → `awaiting_card` com a mensagem "final 5678 não cadastrado".
+Final de seção ou de linha sem cartão cadastrado: a linha fica no cartão do documento e o arquivo
+recebe o aviso `unknown_card_hint:5678` (cadastre o final no cartão, ou num adicional, e reprocesse).
+Só fica `awaiting_card` quando nem o documento é identificado.
 Para extratos, o mesmo vale com `account_hint`. Com cartões adicionais, o documento de fatura
 pertence ao cartão **principal** (`parent_card_id`), e cada linha guarda o cartão da sua seção.
 

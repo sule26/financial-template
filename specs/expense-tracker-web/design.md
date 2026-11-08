@@ -173,10 +173,14 @@ O alerta global e o filtro "sem categoria" tornam o estado visível até ser res
 | YAML | PyYAML | MIT |
 | Testes backend | pytest, pytest-cov, hypothesis, reportlab (PDFs sintéticos) | MIT / MIT / MPL-2.0 / BSD |
 | Frontend | React 18, TypeScript, Vite, TanStack Query, React Router, Mantine, Recharts | MIT |
+| Frontend (visual) | @tabler/icons-react 3.49.0 (ícones); fontes @fontsource-variable/bricolage-grotesque 5.3.0 e @fontsource-variable/manrope 5.3.0, empacotadas (sem CDN) | MIT; fontes OFL-1.1 |
 | Testes frontend | Vitest, Testing Library, MSW, Playwright | MIT / MIT / MIT / Apache-2.0 |
 | Runtime | Docker, docker compose | — |
 
 Versões exatas pinadas em `backend/pyproject.toml` e `frontend/package-lock.json` (T0.2, T0.3).
+As fontes são OFL-1.1 (licença permissiva própria para fontes: uso e empacotamento livres, só não
+podem ser vendidas sozinhas); o pacote npm é só o invólucro. Animações são CSS + `requestAnimationFrame`,
+sem biblioteca de motion.
 `hypothesis` é MPL-2.0 (copyleft fraco por arquivo): aceitável como dependência só de teste, sem
 modificar nem redistribuir seu código.
 

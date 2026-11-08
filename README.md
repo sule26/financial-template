@@ -4,8 +4,8 @@ Aplicação web pessoal para histórico completo de gastos: cartões, contas, pa
 assinaturas, renda, investimentos e divisão de gastos entre pessoas. Lê faturas e extratos em PDF
 de qualquer banco a partir de uma pasta sincronizada.
 
-> **Estado**: planejamento concluído; implementação começa pela Fase 0
-> ([tasks.md](specs/expense-tracker-web/tasks.md)).
+> **Estado**: todas as tasks das Fases 0–4 implementadas e validadas (`task ci` e `task e2e` verdes;
+> backend ≥ 98% de cobertura). Próximas ideias na Fase 5 ([tasks.md](specs/expense-tracker-web/tasks.md)).
 
 ## Destaques
 
@@ -33,7 +33,10 @@ e a [estratégia de testes](docs/11-estrategia-de-testes.md). Guia para agentes 
 
 ## Rodar
 
-Requer apenas Docker. Comandos em [docs/14-operacao.md](docs/14-operacao.md) (disponíveis a partir da Fase 0).
+**Guia de uso passo a passo: [HOW-TO.md](HOW-TO.md).**
+
+Requer Docker e [Task](https://taskfile.dev). Primeira vez: `task init && task up` →
+http://127.0.0.1:8080. Detalhes, backup e problemas comuns em [docs/14-operacao.md](docs/14-operacao.md).
 
 ## Origem
 

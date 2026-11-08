@@ -1,0 +1,22 @@
+# Never send personal data or local state to the Docker daemon
+faturas/
+extratos/
+inbox/
+data/
+secrets/
+profiles/*.yaml
+.git/
+.task/
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+.kiro/
+.claude/
+*.pdf
+*.csv

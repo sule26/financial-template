@@ -73,7 +73,7 @@ scan():
 | NOVO | Parse → resolve cartão/conta → se fatura: verifica [substituição](#substituição-de-fatura) → staging (`pending_review`) |
 | ALTERADO | Reparse; [diff por fingerprint](#diff-por-fingerprint) contra a versão anterior do mesmo path |
 | MOVIDO | Atualiza `path` no manifesto e em `source.path`; não reprocessa |
-| DUPLICADO | `duplicate`; nada importado. Se o original sair, o duplicado é promovido e importado |
+| DUPLICADO | `duplicate`; nada importado. Se o original sair, o duplicado assume o lugar dele mantendo as confirmações |
 | REMOVIDO | Apaga de `staging` e `transactions` tudo com `source.sha256 = h`, aplica a [cascata](#cascata-de-remoção), remove do manifesto. **Anotações ficam** |
 
 ## Substituição de fatura
@@ -154,6 +154,9 @@ consumidor**. A API responde ao scan manual com o id do job; o estado aparece na
 |----------|---------------|
 | App cai no meio de uma operação | Manifesto é gravado por último; no início, o scan compara manifesto x disco x lançamentos e refaz a operação (idempotente) |
 | Senha errada | `error` "senha inválida para perfil X"; nada importado |
+| Arquivo conhecido muda e a nova versão não pode ser lida | A versão anterior continua ativa (nada é apagado) com o aviso "nova versão não pôde ser lida" |
+| Arquivo ativo sem nenhum lançamento guardado (inconsistência) | Alerta global "Arquivo sem lançamentos" com atalho para reprocessar |
+| Arquivo removido com cópia idêntica (mesmo hash) ainda na inbox | A cópia assume as linhas, confirmações e status (como MOVIDO), sem reimportar |
 | Perfil quebrado | `error` com a mensagem de validação |
 | Soma ≠ total da fatura | Importa com aviso `sum_mismatch` |
 | Arquivo removido com lançamentos confirmados | Somem (R3.4) + cascata; anotações guardadas |

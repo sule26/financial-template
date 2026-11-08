@@ -9,6 +9,7 @@
   {"schema_version": 1, "items": [ ... ]}
   ```
 - **Dinheiro**: string decimal canônica com ponto e exatamente 2 casas (`"150.00"`, `"-65.00"`), nunca float.
+  Entrada com mais de 2 casas (`"150.005"`) é **rejeitada**, nunca arredondada em silêncio.
 - **Percentual**: string decimal com exatamente 2 casas (`"33.34"`). Toda divisão fixa soma **exatamente** `"100.00"`.
 - **Datas** em ISO (`"2026-09-14"`); **meses** como `"YYYY-MM"`.
 - **IDs**: prefixo do tipo (`usr_`, `card_`, `acc_`, `tx_`, `plan_`, `split_`, `inv_`…) + ULID.
@@ -17,7 +18,10 @@
 - Ordem de gravação numa operação de sync: dados (`staging`, `transactions`, derivados) primeiro,
   `import_manifest.json` por último. Se a app cair no meio, o scan de inicialização refaz a operação
   ([05](05-sincronizacao.md#garantias-e-falhas)).
-- Backup em `data/.backups/<timestamp>/` antes de cada importação e migração (mantém `BACKUPS_KEEP`).
+- Backup em `data/.backups/<timestamp>-<motivo>/` antes de cada importação e de cada migração (um só
+  backup por inicialização, mesmo que várias coleções migrem; mantém `BACKUPS_KEEP`).
+- Operações em lote (`batch`) são tudo-ou-nada: se algo falha no meio, as coleções voltam ao estado
+  do início do lote na memória e nada é gravado.
 - Migração: ao iniciar, cada arquivo com `schema_version` antigo passa por `migrate_vN_to_vN+1` em sequência. Toda migração tem teste.
 
 ## Formas de divisão (`AllocationSpec`)
@@ -38,22 +42,43 @@ O percentual de um `split_id` é resolvido pelo `invoice_month` do lançamento n
 ### users.json
 ```json
 {"id": "usr_eu", "name": "Eu", "aliases": ["FULANO DE TAL"],
- "income_history": [{"from_month": "2026-01", "amount": "8000.00"}]}
+ "income_history": [],
+ "incomes": [
+   {"name": "Emprego A", "history": [{"from_month": "2026-01", "amount": "8000.00"}]},
+   {"name": "Freela",    "history": [{"from_month": "2026-03", "amount": "1500.00"},
+                                     {"from_month": "2026-08", "amount": "0.00"}]}
+ ],
+ "one_off_incomes": [{"month": "2026-12", "amount": "2500.00", "description": "Bônus"}],
+ "collector_user_id": null}
 ```
-`income_history` pode ser vazio (renda opcional). Renda `"0.00"` equivale a "sem renda" para cálculos
-de proporção e renda comprometida. `aliases`: nomes que aparecem no extrato (sugestão de acerto).
+Renda é opcional (R14.4): `incomes` lista as rendas com nome, cada uma com sua vigência (para
+encerrar uma renda, uma vigência com `"0.00"`); `one_off_incomes` são rendas de um mês só
+(`amount > 0`). A renda do mês `M` = `income_history` (legado, uma renda sem nome; a tela move para
+`incomes` ao salvar) + Σ vigente de cada `incomes` + Σ `one_off_incomes` de `M` + benefícios em
+conta. Renda pontual **não** entra na divisão proporcional à renda (R6.12). Renda `"0.00"` equivale a
+"sem renda" para cálculos de proporção e renda comprometida. `aliases`: nomes que aparecem no extrato (sugestão de acerto).
+`collector_user_id` ("repassar o que deve para", R13.11): opcional; quando definido, tudo o que esse
+usuário deve passa a ser devido a essa pessoa ([08](08-divisoes-e-acertos.md#repassar-para-r1311)).
+Precisa existir e ser diferente do próprio `id`; um usuário que é coletor de outro não pode ser
+excluído.
 
 ### split_profiles.json
-Padrões de divisão reutilizáveis (R6.10–R6.12).
+Padrões de divisão reutilizáveis (R6.10–R6.12, R13.12).
 ```json
 {"id": "split_casal", "name": "Casal", "members": ["usr_eu", "usr_esposa"],
  "mode": "fixed",
  "history": [
-   {"from_month": "2026-01", "shares": [{"user_id": "usr_eu", "pct": "60.00"}, {"user_id": "usr_esposa", "pct": "40.00"}]},
-   {"from_month": "2027-03", "shares": [{"user_id": "usr_eu", "pct": "55.00"}, {"user_id": "usr_esposa", "pct": "45.00"}]}
+   {"from_month": "2026-01", "mode": "fixed",
+    "shares": [{"user_id": "usr_eu", "pct": "70.00"}, {"user_id": "usr_esposa", "pct": "30.00"}]},
+   {"from_month": "2026-06", "mode": "income_proportional", "shares": []},
+   {"from_month": "2027-01", "mode": "fixed",
+    "shares": [{"user_id": "usr_eu", "pct": "50.00"}, {"user_id": "usr_esposa", "pct": "50.00"}]}
  ]}
 ```
-`mode`: `fixed` ou `income_proportional` (nesse caso `history` é o fallback; obrigatório nos dois modos).
+Cada versão escolhe seu `mode` (`fixed` ou `income_proportional`). Versão `fixed` exige `shares`
+somando 100,00 com membros do padrão; versão `income_proportional` aceita `shares` vazio (se tiver
+percentuais, eles servem de fallback). `mode` da versão ausente/`null` herda o `mode` do padrão
+(formato antigo, padrão `fixed`), então arquivos existentes continuam válidos.
 
 ### accounts.json
 ```json
@@ -63,12 +88,16 @@ Padrões de divisão reutilizáveis (R6.10–R6.12).
  "responsible_user_id": "usr_eu",
  "profile_id": "banco-x-extrato",
  "account_hint": "12345-6",
- "confirm_manual_after_days": null}
+ "confirm_manual_after_days": null,
+ "renewal_day": null}
 ```
 `owners` e `responsible_user_id` são obrigatórios em contas.
 `type`: `checking` (conta corrente: débito, PIX, transferência, boleto), `benefit` (VR/VA) ou `cash`
 (carteira). `confirm_manual_after_days`: para contas sem extrato em PDF (comum em benefício),
 lançamentos manuais viram definitivos após N dias ([16](16-dia-a-dia.md#meios-de-pagamento-r11)).
+`renewal_day` (opcional, 1–31, R13.17): dia do mês em que o saldo do cartão de benefício renova
+(o crédito do benefício cai nesse dia). Só é aceito em `type = benefit` — benefício não tem
+fechamento nem vencimento; em outro tipo a API responde 422.
 
 ### cards.json
 ```json
@@ -210,6 +239,26 @@ Algoritmo de avaliação em [08](08-divisoes-e-acertos.md#regras-padrão).
 ```
 `origin` = `{"type": "import", "fingerprint": …}` quando veio de sugestão do extrato.
 
+Campos opcionais de vínculo (R13.16): `card_id` (sempre gravado como o **cartão principal**; um
+adicional é trocado pelo principal), `account_id` e `invoice_month`. Com vínculo, o acerto quita um
+recebimento específico de "A receber" ([08](08-divisoes-e-acertos.md#marcar-como-recebido-r1316));
+sem vínculo (`invoice_month = null`), conta só no saldo líquido. Regras: `card_id` e `account_id` não
+podem vir juntos; qualquer um deles exige `invoice_month`.
+```json
+{"id": "set_9", "origin": {"type": "manual"},
+ "from_user_id": "usr_bia", "to_user_id": "usr_ana", "amount": "50.00",
+ "date": "2026-10-12", "month": "2026-10", "note": "Recebimento Cartão principal 10/2026",
+ "card_id": "card_main", "account_id": null, "invoice_month": "2026-10"}
+```
+
+### institutions.json
+Instituições que não são contas cadastradas, onde ficam investimentos (R13.15). Prefixo de id `inst`.
+```json
+{"id": "inst_xp", "name": "XP Investimentos", "type": "broker"}
+```
+`type`: `broker` (corretora), `exchange`, `pension` (previdência), `bank`, `other`. Não pode ser
+apagada enquanto um investimento a usa (`investments.institution_id`).
+
 ### annotations.json
 Minhas edições, por fingerprint. Sobrevivem à remoção do PDF (R3.5).
 ```json
@@ -271,5 +320,7 @@ Planos, acertos e movimentações de investimento criados a partir de uma linha 
 3. Todo `*_id` referenciado existe (ou a gravação é rejeitada). Exceção única: `category_id = null` em itens cuja categoria foi removida (R1.12).
 4. Nenhum float em disco.
 5. Depois de resolver herança, todo cartão/conta tem donos válidos e um responsável.
-6. No máximo **um** documento de fatura ativo por (`card_id` do cartão principal, `invoice_month`).
+6. No máximo **um** documento de fatura ativo **e válido para cálculo** por (`card_id` do cartão
+   principal, `invoice_month`). Um documento novo ainda em revisão com `supersedes_candidate` não conta
+   até a substituição ser aprovada ([05](05-sincronizacao.md#substituição-de-fatura)).
 7. Fingerprints são únicos por cartão/conta entre lançamentos ativos (staging + transactions).

@@ -49,3 +49,6 @@ test-results/
 
 # Taskfile cache
 .task/
+
+# Hypothesis example database (local test cache)
+.hypothesis/

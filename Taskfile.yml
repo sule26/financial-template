@@ -1,0 +1,166 @@
+# Taskfile (go-task v3). All commands run inside Docker; no Python/Node on the host.
+# List: task --list
+version: "3"
+
+vars:
+  BACKEND_IMAGE: expense-tracker-backend-dev
+  NODE_IMAGE: node:20.18.1-slim@sha256:b2c8e0eb8a6aeeae33b2711f8f516003e27ee45804e270468d937b3214f2f0cc
+  PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.49.1-noble
+  APP_IMAGE: expense-tracker:local
+  UIDGID:
+    sh: echo "$(id -u):$(id -g)"
+  PY: >-
+    docker run --rm -u {{.UIDGID}} -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1
+    -v "{{.ROOT_DIR}}:/src" -w /src/backend {{.BACKEND_IMAGE}}
+  NODE: >-
+    docker run --rm -u {{.UIDGID}} -e HOME=/tmp -e npm_config_cache=/tmp/.npm
+    -v "{{.ROOT_DIR}}:/src" -w /src/frontend {{.NODE_IMAGE}}
+
+tasks:
+  default:
+    cmds: [task --list]
+    silent: true
+
+  # ---------- images ----------
+  backend:image:
+    desc: Build the backend dev/test image (deps only; source is bind-mounted)
+    sources: [backend/pyproject.toml, backend/Dockerfile.dev]
+    status:
+      - docker image inspect {{.BACKEND_IMAGE}} >/dev/null 2>&1
+    method: checksum
+    cmds:
+      - docker build -q -f backend/Dockerfile.dev -t {{.BACKEND_IMAGE}} backend
+
+  frontend:install:
+    desc: Install frontend dependencies (npm ci) into frontend/node_modules
+    sources: [frontend/package.json, frontend/package-lock.json]
+    generates: [frontend/node_modules/.package-lock.json]
+    cmds:
+      - "{{.NODE}} sh -c 'if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi'"
+
+  # ---------- tests ----------
+  test:
+    desc: Run backend and frontend tests
+    cmds:
+      - task: test:backend
+      - task: test:frontend
+
+  test:backend:
+    desc: Backend tests (pytest)
+    deps: [backend:image]
+    cmds:
+      - "{{.PY}} pytest {{.CLI_ARGS}}"
+
+  test:frontend:
+    desc: Frontend tests (vitest)
+    deps: [frontend:install]
+    cmds:
+      - "{{.NODE}} npx vitest run {{.CLI_ARGS}}"
+
+  coverage:
+    desc: Backend coverage with the 90% gate (total and per package) + frontend coverage
+    deps: [backend:image, frontend:install]
+    cmds:
+      - "{{.PY}} sh -c 'pytest --cov --cov-report=term --cov-report=json:/tmp/cov.json --cov-fail-under=90 && python /src/scripts/coverage_per_package.py /tmp/cov.json 90'"
+      - "{{.NODE}} npx vitest run --coverage"
+
+  lint:
+    desc: ruff + mypy (backend), tsc + eslint (frontend)
+    deps: [backend:image, frontend:install]
+    cmds:
+      - "{{.PY}} sh -c 'ruff check src tests && ruff format --check src tests && mypy'"
+      - "{{.NODE}} sh -c 'npx tsc --noEmit && npx eslint src --max-warnings=0'"
+
+  format:
+    desc: Auto-format backend (ruff) and frontend (prettier)
+    deps: [backend:image, frontend:install]
+    cmds:
+      - "{{.PY}} sh -c 'ruff format src tests; ruff check --fix src tests; true'"
+      - "{{.NODE}} npx prettier --write src"
+
+  trace:
+    desc: Every requirement cited by a completed task has a test_r<x>_<y>_* test
+    deps: [backend:image]
+    cmds:
+      - "{{.PY}} python /src/scripts/trace.py /src {{.CLI_ARGS}}"
+
+  docs-check:
+    desc: Check relative links and anchors across all markdown files
+    deps: [backend:image]
+    cmds:
+      - "{{.PY}} python /src/scripts/docs_check.py /src"
+
+  audit:
+    desc: Dependency vulnerability audit (pip-audit, npm audit)
+    deps: [backend:image, frontend:install]
+    cmds:
+      - "{{.PY}} pip-audit --progress-spinner off --skip-editable"
+      - "{{.NODE}} npm audit --omit=dev --audit-level=high"
+
+  ci:
+    desc: Everything CI runs
+    cmds:
+      - task: lint
+      - task: coverage
+      - task: trace
+      - task: docs-check
+      - task: build
+      - task: audit
+
+  # ---------- run ----------
+  build:
+    desc: Build the production image (frontend build + backend)
+    cmds:
+      - docker build -q -t {{.APP_IMAGE}} .
+
+  init:
+    desc: Create local runtime folders (data, inbox, profiles, secrets)
+    cmds:
+      - mkdir -p data inbox/faturas inbox/extratos profiles secrets
+      - test -f secrets/pdf-passwords.yaml || (echo '{}' > secrets/pdf-passwords.yaml && chmod 400 secrets/pdf-passwords.yaml)
+    status:
+      - test -d data -a -d inbox/faturas -a -f secrets/pdf-passwords.yaml
+
+  up:
+    desc: Start the app at http://127.0.0.1:8080 (APP_PORT=8090 task up to change the port)
+    deps: [init]
+    cmds:
+      - UIDGID={{.UIDGID}} docker compose up -d --build app
+
+  down:
+    desc: Stop the app
+    cmds:
+      - docker compose down
+
+  logs:
+    desc: Follow app logs
+    cmds:
+      - docker compose logs -f app
+
+  dev:
+    desc: Backend with reload + Vite dev server (http://127.0.0.1:5173)
+    deps: [init, backend:image, frontend:install]
+    cmds:
+      - UIDGID={{.UIDGID}} docker compose --profile dev up backend-dev frontend-dev
+
+  e2e:
+    desc: Playwright end-to-end tests against a throwaway app container
+    deps: [build, frontend:install, backend:image]
+    cmds:
+      - ./scripts/e2e.sh "{{.APP_IMAGE}}" "{{.PLAYWRIGHT_IMAGE}}" "{{.UIDGID}}"
+
+  ui-tour:
+    desc: Screenshot every screen (light + dark) with synthetic data into TOUR_DIR (default /tmp/et-ui-tour)
+    deps: [build, frontend:install, backend:image]
+    cmds:
+      - chmod +x scripts/ui-tour.sh
+      - ./scripts/ui-tour.sh "{{.APP_IMAGE}}" "{{.PLAYWRIGHT_IMAGE}}" "{{.UIDGID}}" "{{.TOUR_DIR | default "/tmp/et-ui-tour"}}"
+
+  backup:
+    desc: Copy data/ to data/.backups/<timestamp>/
+    cmds:
+      - |
+        ts=$(date +%Y%m%dT%H%M%S)-manual
+        mkdir -p "data/.backups/$ts"
+        find data -maxdepth 1 -name '*.json' -exec cp {} "data/.backups/$ts/" \;
+        echo "backup -> data/.backups/$ts (manual backups are never rotated)"

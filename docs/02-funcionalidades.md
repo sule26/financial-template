@@ -21,6 +21,7 @@ Lista completa, com origem e requisito correspondente em
 | Resumo anual | Por categoria | R1.6 |
 | Atualização dinâmica | Categorias e metas de poupança novas aparecem no Resumo sozinhas | R1.7 |
 | Ajuda | "Como usar" e "Como modificar" | R1.8 |
+| Modo escuro | Tema claro, escuro ou do sistema, alternável no cabeçalho | R1.14 |
 
 ## Novas
 

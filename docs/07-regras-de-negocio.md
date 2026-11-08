@@ -19,7 +19,9 @@ Regra de fechamento: a compra na data `d` cai no primeiro fechamento **> d** (co
 fechamento vai para a fatura seguinte). Vencimento = `due_day` no mesmo mês do fechamento se
 `due_day > closing_day`, senão no mês seguinte. Dia inexistente no mês (ex.: 31 em fevereiro) = último
 dia do mês. O `billing_history` usado é o de maior `from_month ≤` mês do fechamento candidato; mudar o
-fechamento a partir de um mês não altera meses anteriores.
+fechamento a partir de um mês não altera meses anteriores. Uma troca de fechamento/vencimento pode
+fazer um mês ficar **sem fatura** (ex.: de 3/10 para 25/5 a partir de 2026-11: nenhuma fatura vence em
+2026-11); esse mês aparece vazio, sem aviso de "faltando".
 
 Exemplos (cartão: fechamento 3, vencimento 10):
 
@@ -66,7 +68,8 @@ Relativo a `H(cartão do plano)`:
 
 | Status | Condição |
 |--------|----------|
-| `cancelado` | `status_override.cancelled` (exibe a partir de qual parcela) |
+| `cancelado` | `status_override.status = cancelled` (exibe a partir de qual parcela) |
+| (antecipada no banco) | `status_override.status = anticipated_at_bank`: parcelas `n..N` saem da projeção; o status segue as regras abaixo com o cronograma restante |
 | `pago` | Todas as cobranças do cronograma em meses `< H` |
 | `quase acabando` | Restam 1 ou 2 cobranças em meses `≥ H` |
 | `em andamento` | Restam 3 ou mais |
@@ -83,9 +86,11 @@ sugere "cancelar o plano a partir da parcela n+1" (`status_override`). Estorno n
 
 Quitar as parcelas `k..N` de uma vez.
 
-1. Lançamentos → plano → "Antecipar": escolho a parcela inicial (padrão: a primeira com mês `≥ H`).
-2. `target_month` padrão = primeiro mês `≥ H` sem fatura importada daquele cartão; editável, mas
-   **nunca** `< H` (R7.1).
+1. Lançamentos → plano → "Antecipar": `target_month` padrão = primeiro mês `≥ H` sem fatura
+   importada daquele cartão; editável, mas **nunca** `< H` (R7.1).
+2. Parcela inicial padrão = a primeira cujo mês é `≥ target_month`. Parcela com mês **anterior** ao
+   `target_month` não pode ser antecipada: ela já é cobrada na própria fatura (antecipá-la contaria
+   duas vezes). Antecipação já vinculada à fatura real não pode ser refeita nem o plano cancelado.
 3. Valor: **opcional**. Bancos costumam dar desconto de juros (3 × R$ 100 = R$ 300, mas o banco cobra
    R$ 285). Informado → a projeção usa ele; não informado → soma das parcelas.
 4. Efeito: as parcelas `k..N` somem dos meses seguintes; aparece "Antecipação LOJA X (6–10/10)" em `target_month`.
@@ -114,9 +119,13 @@ vigência antiga (`end_month`) e crio outra, para não alterar o passado.
 
 ## Renda
 
-Valor vigente no mês `M` = entrada de `income_history` com o maior `from_month ≤ M`. Sem entrada, ou
-valor `0.00` → sem renda naquele mês. Para lançamentos, `M` = `invoice_month` (a fatura de outubro é
-comparada com a renda de outubro, mês em que é paga).
+Valor vigente de uma renda no mês `M` = entrada do histórico dela com o maior `from_month ≤ M`. A renda
+do usuário em `M` é a soma das rendas com nome (`incomes`, R14.4; o `income_history` legado conta
+como mais uma) + as rendas pontuais de `M` (`one_off_incomes`) + benefícios em conta. Total `0.00` →
+sem renda naquele mês. A divisão proporcional à renda (R6.12) usa a mesma soma **sem** as rendas
+pontuais: um bônus de dezembro aumenta a renda e a sobra de dezembro, mas não muda quem paga quanto
+da casa. Sem pessoa selecionada, Resumo usa a renda da casa (soma de todos, R14.6). Para lançamentos,
+`M` = `invoice_month` (a fatura de outubro é comparada com a renda de outubro, mês em que é paga).
 
 ## Real x projetado
 
@@ -158,9 +167,16 @@ ficam marcados como incompletos.
 
 Sempre **12 meses**, a partir do mês atual pela data real do momento (`Clock`, fuso `TZ`): meses
 `C … C+11`, onde `C` = mês corrente do calendário. Para cada cartão, os meses `< H(cartão)` dentro da
-janela já são reais (ou `faltando`); dos meses `≥ H`, aplica "real x projetado". Mostra por cartão, por
-categoria, por meio de pagamento e por usuário (aplicando as divisões). A janela anda sozinha quando o
+janela já são reais (ou `faltando`); dos meses `≥ H`, aplica "real x projetado". A janela anda sozinha quando o
 mês vira; não há configuração de tamanho (R1.13).
+
+A projeção é **só de cartões** (R14.2): uma coluna por cartão principal (os adicionais somam no
+principal, porque a fatura é uma só) e por cartão de benefício (conta tipo Benefício). Contas corrente e
+dinheiro (débito, PIX, boleto, transferência, dinheiro) ficam fora da tabela, dos itens do mês, do gráfico
+por categoria e do total, que se chama "Total dos cartões"; esses gastos aparecem no Resumo. A renda
+comprometida da projeção (R1.9) continua contando tudo o que a pessoa gastou, inclusive nas contas.
+Com uma pessoa selecionada, a tabela e a lista de itens mostram só a parte dela (o item exibe "de R$ X",
+o valor inteiro, quando a parte é menor). API: `GET /api/reports/month-items?cards_only=true&user_id=…`.
 
 ## Mês em foco e meses anteriores
 
@@ -179,7 +195,7 @@ mês vira; não há configuração de tamanho (R1.13).
 | Painel | Cálculo |
 |--------|---------|
 | Pizza por categoria | Σ gasto do mês selecionado por categoria; itens sem categoria (R1.12) aparecem como "Sem categoria" |
-| Gasto x renda | Por mês: gasto do usuário selecionado (sua parte) vs renda vigente |
+| Gasto x renda | Por mês: gasto do usuário selecionado (sua parte) vs renda vigente dele; sem pessoa selecionada, gasto total vs **renda da casa** (soma da renda de todos os usuários, R14.6) |
 | Empilhado por cartão | Por mês: Σ gasto por cartão; cada conta aparece como uma série |
 | Por meio de pagamento (R11.4) | Por mês: Σ gasto por `payment_method` (crédito, benefício, débito/PIX/transferência/boleto, dinheiro); filtro disponível em todos os painéis |
 | Resumo anual | Σ gasto por categoria × mês do ano selecionado, com total |

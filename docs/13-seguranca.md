@@ -17,10 +17,12 @@ exposição à rede**.
 | PDF malicioso | Parse em processo com timeout por arquivo; só leitura de texto (sem executar JavaScript/anexos do PDF) |
 | Regex catastrófica no perfil | Timeout por arquivo; vira `status=error` |
 | Plugin Python | Executa com os privilégios da app: só coloque plugins que você escreveu |
-| Container | Usuário não-root, rootfs read-only, escrita só em `data/`, `cap_drop: ALL`, `no-new-privileges` |
-| Logs | Nível INFO sem descrição/valor de lançamentos; DEBUG só sob demanda |
+| Container | Usuário não-root, rootfs read-only, escrita só em `data/` e `profiles/` (editor de perfis), `inbox/` montado read-only, `cap_drop: ALL`, `no-new-privileges` |
+| Clickjacking / sniffing | Toda resposta com `X-Frame-Options: DENY`, `Content-Security-Policy` (`frame-ancestors 'none'`, `default-src 'self'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` |
+| Build | `.dockerignore` impede que `faturas/`, `inbox/`, `data/`, `secrets/` e PDFs/CSVs cheguem ao daemon Docker |
+| Logs | Sem descrição/valor de lançamentos: access log do uvicorn desligado (as query strings têm valores) e falhas de job registram só o tipo do erro |
 | Dados para terceiros | Nenhum. App offline; nenhuma dependência faz chamada de rede em runtime |
-| Supply chain | Dependências pinadas; imagem base oficial pinada por digest; `pip-audit` e `npm audit` no CI |
+| Supply chain | Dependências pinadas; `pip-audit` e `npm audit` (nível high) no `task ci`. Imagens base pinadas por tag **e digest** (`Dockerfile`, `backend/Dockerfile.dev`, `Taskfile.yml`, `docker-compose.yml`; ao atualizar, troque os quatro) |
 
 ## Checklist ao mexer em algo sensível
 

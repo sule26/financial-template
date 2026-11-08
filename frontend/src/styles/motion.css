@@ -1,0 +1,121 @@
+/*
+ * Motion. One orchestrated moment (page enter + stagger) and small, physical micro-interactions.
+ * Everything collapses to the final state under prefers-reduced-motion (bottom of this file); the JS
+ * side (count-up, charts) uses usePrefersMotion() in src/components/ui/motion.ts.
+ */
+
+@keyframes et-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes et-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes et-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes et-guilloche-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Route change: the page wrapper is keyed by pathname, so this runs on every navigation. */
+.et-page {
+  animation: et-rise var(--et-dur) var(--et-ease-out) both;
+}
+
+/* Stagger the direct children of a container (cards, panels). */
+.et-stagger > * {
+  animation: et-rise 420ms var(--et-ease-out) both;
+}
+.et-stagger > *:nth-child(1) {
+  animation-delay: 30ms;
+}
+.et-stagger > *:nth-child(2) {
+  animation-delay: 75ms;
+}
+.et-stagger > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+.et-stagger > *:nth-child(4) {
+  animation-delay: 165ms;
+}
+.et-stagger > *:nth-child(5) {
+  animation-delay: 210ms;
+}
+.et-stagger > *:nth-child(6) {
+  animation-delay: 255ms;
+}
+.et-stagger > *:nth-child(n + 7) {
+  animation-delay: 300ms;
+}
+
+/* Press feedback for buttons (theme.ts adds this class to every Mantine Button). */
+.et-press {
+  transition:
+    transform var(--et-dur-fast) var(--et-ease-out),
+    box-shadow var(--et-dur-fast) var(--et-ease-out),
+    background-color var(--et-dur-fast) ease;
+}
+.et-press:active:not(:disabled, [data-disabled]) {
+  transform: scale(0.98);
+}
+
+.et-fade-in {
+  animation: et-fade var(--et-dur) var(--et-ease-out) both;
+}
+
+.et-pop-in {
+  animation: et-pop var(--et-dur) var(--et-ease-spring) both;
+}
+
+/* R13.16: a receivable just marked as received glows jade once and settles. */
+@keyframes et-settle {
+  from {
+    background-color: color-mix(
+      in srgb,
+      var(--mantine-color-jade-filled, #2f9e44) 22%,
+      transparent
+    );
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.et-settle-flash > td {
+  animation: et-settle 900ms var(--et-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

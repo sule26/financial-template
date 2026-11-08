@@ -37,8 +37,30 @@ o resíduo para fechar 100,00 vai para o membro de maior renda (empate: o primei
 Ex.: eu R$ 9.000, esposa R$ 6.000 → 60,00/40,00. Esposa passa a R$ 7.500 em 2027-03 →
 54,55/45,45 desde 2027-03.
 
-Se algum membro não tem renda (ou tem `0.00`) em `M`, usa a **versão de `history` vigente em `M`**
-(mesma regra do modo fixo) e a UI mostra "proporção fixa usada: renda de X ausente em M".
+Se algum membro não tem renda (ou tem `0.00`) em `M`, ou a renda é tão desigual que um percentual
+arredonda para `0.00`, usa o fallback (R13.12) e a UI mostra o aviso:
+
+1. a versão **com percentuais** (versão fixa) mais recente com `from_month ≤ M` — "proporção fixa
+   usada: renda de X ausente em M";
+2. senão, a primeira versão com percentuais do histórico (mesmo aviso);
+3. senão, divisão igual entre os membros, resíduo de centavos no primeiro — "divisão igual usada: …".
+
+### Modo por versão (R13.12)
+
+Cada versão do padrão escolhe seu próprio modo: percentual livre (`fixed`) ou proporcional à renda
+(`income_proportional`). O modo vigente em `M` é o da versão com maior `from_month ≤ M`. Na versão
+proporcional a UI esconde os percentuais (`shares` pode ficar vazio); versões seguintes podem voltar ao
+percentual livre. Versões sem `mode` (formato antigo) seguem o `mode` do padrão.
+
+| Versão | De | Modo | Eu | Esposa |
+|--------|----|------|----|--------|
+| 1 | 2026-01 | fixo | 70 | 30 |
+| 2 | 2026-06 | proporcional à renda | — | — |
+| 3 | 2027-01 | fixo | 50 | 50 |
+
+Com eu R$ 9.000 e esposa R$ 6.000: lançamento de 2026-05 → 70/30; de 2026-06 a 2026-12 → 60/40 (renda);
+de 2027-01 em diante → 50/50. Se a renda da esposa faltar em 2026-09, 2026-09 usa 70/30 (versão fixa
+mais recente) com aviso.
 
 ### Onde usar
 
@@ -152,6 +174,89 @@ Exemplo:
 | Jantar 120 | da Ana (Ana) | eu 50, Ana 50 | Eu devo 60 à Ana |
 | Acerto: Ana me pagou 40 | — | — | Saldo eu x Ana: 100 − 60 − 40 = **0** |
 
+### Repassar para (R13.11)
+
+Um usuário pode ter "repassar o que deve para" (`users.collector_user_id`). Então cada parte que ele
+deve vai para essa pessoa em vez do responsável:
+
+```
+credor(U) = collector(U) se definido (e ≠ U), senão R
+deve(U → credor(U)) += parte(U)      (U = R continua sem dívida)
+```
+
+Ex.: pais com `collector = Ana`; remédio de R$ 80 no meu cartão, 100% pais → pais devem 80 à **Ana**
+(não a mim). Repasse não é transitivo: vale só o coletor do devedor.
+
+**Coletor → responsável (R13.14).** Quando o coletor não é o responsável, ele repassa o valor: gera
+também a dívida coletor → responsável, com o mesmo valor, lançamento, cartão/conta, vencimento e mês.
+Assim nenhum valor fica sem dono:
+
+```
+SE credor(U) ≠ R:  deve(credor(U) → R) += parte(U)
+```
+
+No exemplo: pais devem 80 à Ana **e** Ana deve 80 a mim. Se o coletor for o próprio responsável
+(remédio no cartão da Ana), só existe a linha pais → Ana.
+
+### Recebimentos por vencimento (R13.11)
+
+`GET /api/reports/receivables?user_id=X&include_pending=false` lista o que X recebe/paga agrupado por
+(contraparte, cartão principal ou conta, `invoice_month`) — 2 cartões no mesmo mês = 2 recebimentos;
+cartão adicional entra no cartão principal. Dentro do grupo créditos e débitos se compensam; `direction`
+é `receive` ou `pay` e `amount` é positivo. Data limite (`due_date`) = vencimento da fatura do cartão:
+o do documento ativo daquele mês, senão o previsto pelo `billing_history`; contas não têm vencimento
+(`null`, vão para o fim). Ordem: `due_date`, mês, contraparte.
+
+Cada item traz também (R13.16) `settled` = soma dos acertos **vinculados** ao item (mesmo par, na
+direção do item — quem paga → quem recebe —, mesmo cartão principal/conta e `invoice_month`),
+`remaining = max(amount − settled, 0)` e `status`: `open` (nada acertado), `partial` ou `received`
+(`remaining = 0`). `overdue` = `remaining > 0` e `due_date < hoje`. `totals` somam `remaining`.
+
+Acertos **sem vínculo** (`invoice_month = null`, ex.: PIX genérico ou sugerido pelo extrato) **não** são
+rateados entre os itens: continuam só no saldo líquido de `/api/reports/balances`; `settled_month_total`
+informa os acertos daquele mês entre o par, vinculados ou não (positivo: a contraparte pagou X;
+negativo: X pagou). Acertos vinculados contam no saldo líquido como qualquer acerto (pelo `month`).
+As linhas de `/api/reports/balances` também trazem `card_id`, `account_id` e `due_date`.
+
+```json
+{"user_id": "usr_ana",
+ "items": [{"counterparty_user_id": "usr_bia", "direction": "receive", "card_id": "card_main",
+            "account_id": null, "invoice_month": "2026-10", "due_date": "2026-10-10",
+            "amount": "50.00", "settled": "20.00", "remaining": "30.00", "status": "partial",
+            "overdue": true, "settled_month_total": "20.00"},
+           {"counterparty_user_id": "usr_bia", "direction": "receive", "card_id": "card_main",
+            "account_id": null, "invoice_month": "2026-11", "due_date": "2026-11-10",
+            "amount": "20.00", "settled": "0.00", "remaining": "20.00", "status": "open",
+            "overdue": false, "settled_month_total": "0.00"}],
+ "totals": {"receive": "50.00", "pay": "0.00"}}
+```
+
+### Marcar como recebido (R13.16)
+
+`POST /api/reports/receivables/mark-received` cria um acerto vinculado ao recebimento e devolve o
+acerto criado (`201`):
+
+```json
+{"user_id": "usr_ana", "counterparty_user_id": "usr_bia", "direction": "receive",
+ "card_id": "card_main", "account_id": null, "invoice_month": "2026-10", "amount": null}
+```
+
+- O item é localizado por (usuário, contraparte, `direction`, cartão — adicional vira o principal — ou
+  conta, `invoice_month`), com o mesmo filtro de "A receber" (`include_pending`, padrão `false`).
+- Acerto: `from` = quem paga (a contraparte em `receive`, o próprio usuário em `pay`), `to` = quem
+  recebe, `amount` = `remaining` se omitido (valor informado pode ser parcial), `date` = hoje,
+  `month` = `invoice_month`, `note` = `"Recebimento <cartão ou conta> MM/AAAA"`.
+- Erros: usuário inexistente `404 not_found`; item inexistente `404 receivable_not_found`; nada a
+  receber (`remaining = 0` e sem `amount`, ou `amount = 0`) `409 already_received`.
+- **Desmarcar** = `DELETE /api/settlements/{id}` do acerto criado.
+
+```json
+{"id": "set_9", "origin": {"type": "manual"}, "from_user_id": "usr_bia", "to_user_id": "usr_ana",
+ "amount": "30.00", "date": "2026-10-12", "month": "2026-10",
+ "note": "Recebimento Cartão principal 10/2026", "warnings": [],
+ "card_id": "card_main", "account_id": null, "invoice_month": "2026-10"}
+```
+
 ## Mudanças que afetam meses já acertados (R6.13)
 
 Editar renda (modo proporcional), uma versão de padrão de divisão ou uma divisão confirmada, de forma
@@ -163,11 +268,13 @@ que mude o saldo de um mês que já tem acerto (`settlements.month`), mostra ant
 Registro manual (`settlements.json`) ou sugerido pelo extrato (crédito cujo remetente casa com
 `aliases` de um usuário, [09](09-revisao-e-reconciliacao.md#reconciliação)). Tem `from_user_id`,
 `to_user_id`, `amount`, `date`, `month` (mês ao qual se refere), nota e `origin`. O lançamento de
-origem recebe `kind = settlement` e não conta como renda.
+origem recebe `kind = settlement` e não conta como renda. Opcionalmente o acerto é vinculado a um
+recebimento (`card_id` ou `account_id` + `invoice_month`, R13.16) — é o que "marcar como recebido" grava.
 
 ## Testes obrigatórios
 
 Cada linha das tabelas "Donos e responsável", "Precedência" e "Saldos", os dois exemplos de
 arredondamento, o algoritmo de duas passadas das regras, a confirmação congelando a divisão e os
-exemplos de padrão de divisão (fixo com versões, proporcional, fallback sem renda/renda zero) têm
+exemplos de padrão de divisão (fixo com versões, proporcional, modo por versão, fallback sem renda/renda zero), o repasse (inclusive coletor → responsável, R13.14), os recebimentos por vencimento e o
+"marcar como recebido" (R13.16) têm
 teste próprio ([11](11-estrategia-de-testes.md#domain)).

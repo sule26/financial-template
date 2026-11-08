@@ -45,6 +45,7 @@ as features são mantidas.
 - R1.8 WHEN eu acesso a ajuda THEN the system SHALL exibir "Como usar" e "Como modificar" (substituem as abas de instruções da planilha).
 - R1.9 WHEN um usuário tem renda cadastrada no mês THEN the system SHALL exibir a **renda comprometida** dele: sua parte dos gastos (real ou projetada) ÷ renda vigente, por mês, inclusive nos 12 meses de projeção; WHEN não tem renda THEN o indicador não é exibido.
 - R1.13 The system SHALL projetar sempre **12 meses** a partir do mês corrente pela data real (sem configuração), e toda tela SHALL abrir no mês corrente; WHEN eu navego para meses anteriores THEN the system SHALL permitir editá-los (lançar, recategorizar, redividir, confirmar, acertar).
+- R1.14 The system SHALL ter **modo escuro**: tema claro, escuro ou "seguir o sistema" (padrão), alternável no cabeçalho, com a escolha guardada no navegador; gráficos e cores de categoria SHALL manter contraste AA nos dois temas.
 
 ## R2 — Armazenamento em JSON
 
@@ -157,6 +158,46 @@ as features são mantidas.
 - R12.2 The system SHALL prever as próximas ocorrências pela data (última compra + intervalo) e colocar cada uma no mês de fatura correspondente; um mês pode ter zero, uma ou duas ocorrências.
 - R12.3 WHEN uma compra real casa com a ocorrência prevista (descrição similar, valor ±20%, data ±⌈intervalo/3⌉ dias) THEN the system SHALL vinculá-la e **reancorar** as próximas ocorrências a partir da data real.
 - R12.4 WHEN a ocorrência prevista passa da tolerância sem compra THEN the system SHALL avisar ("ração prevista em 10/11 não apareceu") com opções: adiar, pular, encerrar.
+
+## R13 — Feedback do operador (2026-10-13)
+
+Pedidos feitos durante o uso, registrados aqui para não se perderem (tasks na Fase 6 do tasks.md).
+
+- R13.1 The system SHALL ter um visual premium (tema próprio, animações, skeletons, transições) respeitando `prefers-reduced-motion` e contraste AA nos dois temas.
+- R13.2 WHEN um cartão (principal) ou conta (não dinheiro) é criado ou renomeado THEN the system SHALL criar a pasta `inbox/faturas/<nome em minúsculo>` / `inbox/extratos/<nome em minúsculo>`; arquivos dentro dela SHALL ser atribuídos a esse cartão/conta, e o nome do arquivo `YYYY-MM` SHALL ser usado como mês da fatura quando o documento não informar o vencimento (aviso se divergir).
+- R13.3 The system SHALL ler os bancos suportados (perfis de exemplo embutidos) sem exigir copiar perfis para `profiles/`.
+- R13.4 WHEN uma pessoa está selecionada na Projeção/Resumo THEN the system SHALL mostrar só os cartões e contas dela (dona ou responsável) e um total geral de contas + cartões.
+- R13.5 The system SHALL permitir cadastrar **benefícios** com nome (ex.: "VR", "Auxílio home office"), pessoa, onde cai (cartão de benefício ou conta corrente) e valor mensal com vigência; benefício em conta soma na renda, benefício em cartão soma na renda em benefício, e o cartão de benefício é meio de pagamento.
+- R13.6 The system SHALL impedir excluir usuário com qualquer vínculo (contas, cartões, divisões, lançamentos, anotações, acertos, investimentos, benefícios), explicando o que o prende.
+- R13.7 The system SHALL criar, na primeira execução, as categorias: Alimentação, Aluguel, Animais, Banco, Casa, Compras, Delivery, Digital, Educação, Entretenimento, Família, Lazer, Moradia, Outros, Pessoal, Presente, Saúde, Trabalho, Transporte.
+- R13.8 The system SHALL ter seletor de mês dinâmico (escolher mês/ano direto, teclado), sem navegar um mês por vez.
+- R13.9 Perfis de banco SHALL ser simples de usar: mostrar quais bancos já são suportados, testar um arquivo e ver o resultado em linguagem clara; YAML só no modo avançado.
+- R13.10 The system SHALL ter uma tela **Configurações** para escolher a cor de destaque do app (várias opções) além do tema claro/escuro, guardada no navegador.
+- R13.11 WHEN um usuário tem "repassar para" definido THEN tudo o que ele deve SHALL ser devido a essa pessoa; e "A receber" SHALL mostrar um recebimento por cartão/conta e mês, com a data limite = vencimento da fatura do cartão onde a compra foi feita (2 cartões → 2 recebimentos).
+- R13.12 Cada **versão** de um padrão de divisão SHALL escolher seu modo (percentual livre ou proporcional à renda); no modo proporcional a UI SHALL esconder os percentuais; versões seguintes podem voltar ao percentual livre.
+- R13.13 Todo campo de mês/data na UI SHALL usar seletor (calendário/mês), nunca texto livre `YYYY-MM`.
+- R13.14 WHEN o coletor ("repassar para") não é o responsável pelo cartão THEN the system SHALL gerar também a dívida coletor → responsável, para que nenhum valor fique sem dono.
+- R13.15 Investimentos SHALL ter instituição escolhida de uma lista: contas cadastradas ou instituições configuráveis que não são banco (corretora, exchange, previdência, outro) — tela Cadastros → Instituições.
+- R13.16 Em "A receber", cada recebimento (pessoa, cartão/conta, mês) SHALL poder ser marcado como **recebido** (gera um acerto vinculado a esse cartão/mês) e desmarcado; recebimentos quitados aparecem como recebidos.
+- R13.17 Cartão de benefício (VR/VA) SHALL ser uma conta do tipo Benefício com **dia de renovação** opcional (1–31; o crédito do benefício cai nesse dia), sem fechamento nem vencimento; o dia de renovação SHALL ser rejeitado em contas de outro tipo. A tela de Cartões SHALL orientar a cadastrar o benefício em Contas, e a lista de Cartões SHALL mostrar os donos e o responsável efetivos (herdados da conta ou do cartão principal, com a origem).
+
+## R14 — Feedback do operador (2026-11): visibilidade e cadastro
+
+Pedidos feitos depois do tour visual de 2026-11 (tasks na Fase 7 do tasks.md).
+
+- R14.1 WHEN eu cadastro uma conta ou cartão THEN the system SHALL aceitar **um ou mais responsáveis** (quem paga o banco), cada um com percentual somando 100% (lista fixa ou padrão de divisão, como os donos); com um só responsável o comportamento é o de R6.8. A parte de cada pessoa num lançamento SHALL ser devida a cada responsável na proporção dele (a parte que cabe ao próprio responsável não vira dívida). O **responsável principal** (o de maior percentual; empate: primeiro da lista) recebe o resíduo de centavos e as sugestões de acerto. No cartão, responsáveis são herdados junto com o responsável principal (nunca misturados entre níveis). "Repassar para" (R13.11, R13.14) vale para cada responsável.
+- R14.2 The **Projeção** SHALL mostrar só cartões: uma coluna por cartão principal (adicionais somados no principal) e por cartão de benefício (conta tipo Benefício); contas corrente e dinheiro não entram na tabela, nos itens do mês nem no total, que passa a ser "Total dos cartões". A lista de itens do mês SHALL respeitar a pessoa selecionada.
+- R14.3 Em toda tela (tabelas, gráficos, legendas, selects, avisos), cartões e contas SHALL ter rótulo inequívoco: um nome único entre cartões e contas aparece como está ("Nubank"); quando dois ou mais têm o mesmo nome (sem diferenciar maiúsculas/espaços), cada um ganha o que o distingue: cartão "Inter (cartão ••1234)", adicional "Inter (adicional ••5678)", conta "Inter (conta)", benefício "VR (benefício)", dinheiro "Carteira (dinheiro)". Dois itens nunca aparecem com o mesmo rótulo.
+- R14.4 Um usuário SHALL poder ter **várias rendas** com nome (ex.: "Emprego A", "Freela"), cada uma com valor e histórico de vigência, e **rendas pontuais** de um único mês (ex.: "Bônus" em 2026-12). A renda do mês é a soma das rendas vigentes + pontuais do mês + benefícios em conta (R13.5). Renda pontual entra na renda do mês, na sobra e na renda comprometida, mas **não** na divisão proporcional à renda (R6.12), para um extra de um mês não mudar a divisão da casa.
+- R14.5 O cadastro de **cartão** SHALL ser guiado: seções (identificação, quem usa e quem paga, fatura, leitura do PDF), texto de ajuda em cada campo, banco escolhido numa lista de bancos suportados (não id livre), a pasta onde colocar as faturas, e um resumo ao vivo de donos/responsáveis efetivos ("herdado da conta Inter: Casal 60/40"). O mesmo vale, no que couber, para o cadastro de conta.
+- R14.6 Sem pessoa selecionada, Resumo e Projeção SHALL usar a renda da casa (soma das rendas de todos), inclusive no gráfico "Gasto x renda"; nenhuma tabela SHALL cortar colunas ou valores (rolagem horizontal visível ou layout que caiba) e a coluna **Ações** SHALL ficar fixa à direita quando a tabela rola, para os botões estarem sempre ao alcance; listas de abas (Cadastros, Lançamentos) SHALL quebrar linha em vez de esconder abas; tudo isso SHALL funcionar em 1440, 1024 e 768 px de largura; nenhum rótulo técnico interno (ex.: `owners:account`) SHALL aparecer para o operador.
+- R14.7 Toda task que toca a UI SHALL passar pelo **tour visual** (`task ui-tour`): todas as telas e abas, claro e escuro, com dados sintéticos, sem erro de console nem API 5xx, e as capturas revisadas (docs/11).
+- R14.8 A Revisão de uma **fatura de cartão** SHALL ter só gastos: linhas que o perfil classifica como pagamento/transferência/receita/acerto (ex.: "PAGAMENTO RECEBIDO", que é o pagamento visto pelo lado do cartão e já aparece no extrato) não entram na Revisão nem viram lançamento; o tipo de uma linha de fatura só pode ser Gasto, Estorno, Tarifa/juros ou Investimento (previdência no cartão, R9.4) — a UI só oferece esses e a API recusa os outros (`422 invalid_kind`).
+- R14.9 Assinaturas e compras recorrentes SHALL ter **histórico de preço** (reajustes: valor a partir de um mês); o valor previsto de cada mês é o vigente nele, sem alterar meses anteriores. A divisão (padrão de divisão ou percentuais) SHALL aparecer na lista das duas.
+- R14.10 Compras recorrentes SHALL poder ser **desativadas e reativadas** (Cadastros e Lançamentos → Recorrentes); ao reativar, opcionalmente com a data da próxima compra.
+- R14.11 Assinaturas e compras recorrentes SHALL guardar os **períodos em que ficaram desativadas** (de um mês até outro, ou "até agora"); cobranças previstas e avisos de "não ocorreu" só existem nos meses ativos. Desativar abre um período a partir da primeira compra que não aconteceu (ou do mês atual); reativar fecha o período no mês anterior à volta.
+- R14.12 O cabeçalho SHALL mostrar o nome do app sem a descrição "livro-caixa pessoal".
+- R14.13 The system SHALL permitir escolher o **idioma** da interface entre português (pt-BR, padrão) e inglês (en) em Configurações, guardado no navegador; datas e dinheiro seguem o idioma escolhido, valores continuam em R$.
 
 ## Acceptance Criteria
 

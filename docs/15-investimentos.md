@@ -1,6 +1,6 @@
 # 15 — Investimentos
 
-[← Índice](README.md) · Requisitos: R9
+[← Índice](README.md) · Requisitos: R9, R13.15
 
 Registro do dinheiro investido: quanto tenho em cada aplicação, como evoluiu e quanto foi aporte
 versus rendimento. A app é offline: **os saldos são informados por mim** (não há cotação automática).
@@ -21,7 +21,8 @@ Tipos: `emergency_reserve` (reserva), `fixed_income` (renda fixa), `stocks` (aç
 ## Modelo (`data/investments.json`)
 
 ```json
-{"id": "inv_reserva", "name": "Reserva CDB Banco X", "institution": "Banco X",
+{"id": "inv_reserva", "name": "Reserva CDB Banco X", "institution": null,
+ "institution_id": "acc_conjunta",
  "type": "emergency_reserve",
  "owners": {"split_id": "split_casal"},
  "goal_id": "goal_reserva",
@@ -34,6 +35,12 @@ Tipos: `emergency_reserve` (reserva), `fixed_income` (renda fixa), `stocks` (aç
 ```
 
 - `owners`: mesma forma de divisão do resto da app ([04](04-modelo-de-dados.md#formas-de-divisão-allocationspec)); define de quem é cada parte do saldo.
+- `institution_id` (R13.15): onde o investimento está, escolhido de uma lista — o id de uma **conta**
+  cadastrada (`acc_…`, ex.: CDB do próprio banco) ou de uma **instituição** que não é conta
+  (`inst_…`, [04 › institutions.json](04-modelo-de-dados.md#institutionsjson): corretora, exchange,
+  previdência, banco, outro), cadastradas em Cadastros → Instituições. Id inexistente → `422
+  reference_not_found`; conta/instituição em uso não pode ser apagada (`409 in_use`).
+- `institution`: texto livre antigo, ainda aceito (dados legados); a UI usa `institution_id`.
 - `account_id`: conta de onde costumam sair os aportes (usada na sugestão vinda do extrato).
 - `goal_id`: meta de poupança que os aportes cumprem (R9.6).
 

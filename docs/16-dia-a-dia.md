@@ -37,9 +37,13 @@ Enquanto o documento não chega, os previstos contam nos painéis (o mês está 
 | `cash` | Conta `cash` (carteira) | — | não (definitivo, R10.4) |
 
 - **Cartão de benefício** é uma **conta** (`accounts.type = benefit`), não um cartão de crédito: tem
-  saldo, créditos mensais do empregador e extrato (PDF, se o emissor fornecer; senão só manual, e os
-  lançamentos manuais viram definitivos após 45 dias sem extrato — configurável por conta
-  `confirm_manual_after_days`).
+  saldo, créditos mensais do empregador e extrato (PDF/CSV, se o emissor fornecer). Sem extrato, os
+  lançamentos manuais são o único registro e sempre contam. Com extrato cobrindo o dia, vale o extrato
+  (o manual casa ou vira aviso). `confirm_manual_after_days` (opcional, sem padrão) só silencia o aviso
+  "não apareceu no extrato" depois de N dias, marcando o manual como definitivo.
+- Cartão de benefício **não tem fechamento nem vencimento** (não há fatura): tem só o **dia de
+  renovação** (`accounts.renewal_day`, opcional, R13.17), o dia do mês em que o crédito do benefício
+  cai. Por isso ele é cadastrado em Contas (tipo Benefício), nunca em Cartões.
 - O crédito do empregador no benefício entra como `kind = income` com `income_type = benefit`
   (renda em benefício), separado da renda em dinheiro em gasto x renda e na renda comprometida
   (que mostra os dois separadamente).
@@ -107,8 +111,10 @@ gatos a cada 45 dias.
 ### Previsão
 
 ```
-next(rec) = rec.last_date + every     # dias, semanas ou meses (mês: mesmo dia, ou último dia do mês)
-ocorrências = next, next+every, …     (até o fim da projeção)
+âncora = rec.next_date ?? rec.last_date
+ocorrência k = âncora + k × every      # k = 1, 2… (ou 0, 1… quando next_date foi definido)
+                                      # mês: mesmo dia da âncora, limitado ao fim do mês
+                                      # (31/01 mensal → 28/02, 31/03, 30/04: não “escorrega”)
 cada ocorrência: data → invoice_month pela regra do cartão; vira uma cobrança prevista
 ```
 
@@ -142,7 +148,7 @@ Hoje > data prevista + tolerância e nenhuma compra casou → aviso na tela Lan�
 
 | Ação | Efeito |
 |------|--------|
-| Adiar | Nova data informada; vira a âncora |
+| Adiar | Nova data informada vira a **próxima ocorrência** (`next_date`); as seguintes contam a partir dela |
 | Pular | Data em `skipped_dates`; próxima = prevista + intervalo |
 | Encerrar | `active = false`; some da projeção |
 

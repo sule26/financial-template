@@ -14,11 +14,10 @@ page_noise:
   - '^[A-ZÀ-Ú ]{10,}$'                                   # holder name in upper case
   - '^\d{4}\*{4}\d{4} \d{2}/\d{2}/\d{4} R\$ [\d.,]+$'   # "NNNN****NNNN dd/mm/yyyy R$ x,xx"
   - '^Data Movimentação Beneficiário Valor$'
-  - '^Despesas da fatura$'
 
 header:
   due_date:   {regex: 'Data de Vencimento[\s\S]*?(?P<v>\d{2}/\d{2}/\d{4})', format: '%d/%m/%Y'}
-  card_hint:  {regex: '(?P<v>\d{4})\*{4}\d{4} \d{2}/\d{2}/\d{4}'}
+  card_hint:  {regex: '\d{4}\*{4}(?P<v>\d{4}) \d{2}/\d{2}/\d{4}'}
   total:      {regex: 'Despesas do mês R\$ (?P<v>[\d.]+,\d{2})'}     # sum of the period's purchases
   amount_due: {regex: 'Fatura atual R\$ (?P<v>-?[\d.]+,\d{2})'}       # may be 0,00 (paid in advance)
 

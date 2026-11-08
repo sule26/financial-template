@@ -1,0 +1,172 @@
+/*
+ * "Cédula" design tokens (rationale + contrast checks: design-tokens.json).
+ * Mantine owns colours/radius/shadows through src/theme.ts; these are the variables it does not own.
+ */
+
+:root {
+  --et-font-display: "Bricolage Grotesque Variable", "Manrope Variable",
+    system-ui, sans-serif;
+  --et-font-body: "Manrope Variable", system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+
+  --et-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --et-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --et-dur-fast: 140ms;
+  --et-dur: 260ms;
+  --et-dur-slow: 700ms;
+
+  --et-sidebar-width: 248px;
+  --et-header-height: 64px;
+}
+
+/* ---------- light: paper under daylight ---------- */
+:root,
+:root[data-mantine-color-scheme="light"] {
+  --et-bg: #f3f6f4;
+  --et-bg-glow-1: rgba(14, 107, 85, 0.09);
+  --et-bg-glow-2: rgba(138, 106, 34, 0.06);
+  --et-surface: #ffffff;
+  --et-surface-raised: #ffffff;
+  --et-surface-sunken: #eef2f0;
+  --et-border: #e1e7e4;
+  --et-border-strong: #cdd6d2;
+  --et-ink: #15201c;
+  --et-muted: #5e6b66;
+  --et-jade: #0e6b55;
+  --et-jade-tint: #e8f6f1;
+  --et-brass: #8a6a22;
+  --et-carmine: #b4233f;
+  --et-positive: #0e6b55;
+  --et-negative: #b4233f;
+  --et-glass: rgba(243, 246, 244, 0.72);
+  --et-glass-border: rgba(21, 32, 28, 0.07);
+  --et-noise-opacity: 0.035;
+  --et-card-shadow: 0 1px 2px rgba(12, 34, 27, 0.05),
+    0 6px 18px -8px rgba(12, 34, 27, 0.12);
+  --et-card-shadow-hover: 0 2px 4px rgba(12, 34, 27, 0.06),
+    0 16px 32px -12px rgba(12, 34, 27, 0.2);
+
+  /* Banknote: the same jade object in both themes (it is a thing, not a surface). */
+  /* Gradient start is the colour behind the small brass label (top left), so it is the one the
+     AA checks in design-tokens.json are made against: label #eed596 is 5.7:1, hint 85% is 5.2:1. */
+  --et-note-from: #0f5a47;
+  --et-note-to: #0a4a3a;
+  --et-note-ink: #f1e6c8;
+  --et-note-brass: #e3c27a;
+  --et-note-label: #eed596;
+
+  --mantine-color-body: var(--et-surface);
+  /* Placeholders at AA (Mantine's gray[5] default is 3.1:1). */
+  --mantine-color-placeholder: #5e6b66;
+  color-scheme: light;
+}
+
+/* ---------- dark: the same ledger at night (green-black, not inverted) ---------- */
+:root[data-mantine-color-scheme="dark"] {
+  --et-bg: #0b1210;
+  --et-bg-glow-1: rgba(67, 181, 146, 0.1);
+  --et-bg-glow-2: rgba(224, 184, 100, 0.05);
+  --et-surface: #131c19;
+  --et-surface-raised: #17221e;
+  --et-surface-sunken: #0f1714;
+  --et-border: #24302b;
+  --et-border-strong: #3d4a45;
+  --et-ink: #e4ebe8;
+  --et-muted: #93a39c;
+  --et-jade: #43b592;
+  --et-jade-tint: rgba(67, 181, 146, 0.14);
+  --et-brass: #e0b864;
+  --et-carmine: #f08196;
+  --et-positive: #43b592;
+  --et-negative: #f08196;
+  --et-glass: rgba(11, 18, 16, 0.66);
+  --et-glass-border: rgba(228, 235, 232, 0.07);
+  --et-noise-opacity: 0.05;
+  --et-card-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --et-card-shadow-hover: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 18px 36px -14px rgba(0, 0, 0, 0.75);
+
+  --et-note-from: #0f5a47;
+  --et-note-to: #072e25;
+  --et-note-ink: #f1e6c8;
+  --et-note-brass: #e3c27a;
+  --et-note-label: #eed596;
+
+  --mantine-color-body: var(--et-surface);
+  --mantine-color-placeholder: #93a39c;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+html {
+  background-color: var(--et-bg);
+}
+
+/* Transparent so the fixed glow/grain layers (z-index -1) show through. */
+body {
+  background-color: transparent;
+  font-family: var(--et-font-body);
+  color: var(--et-ink);
+  font-feature-settings: "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+/* Two soft glows and a paper grain, fixed behind everything. The grain is an inline SVG data URI
+   (allowed by the CSP img-src 'self' data:). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+      1200px 600px at 85% -10%,
+      var(--et-bg-glow-1),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at -10% 110%,
+      var(--et-bg-glow-2),
+      transparent 60%
+    );
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--et-noise-opacity);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+::selection {
+  background: var(--et-jade);
+  color: var(--et-surface);
+}
+
+/* Money and any number column: tabular figures so values line up. */
+.et-num,
+.et-table td,
+.et-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+h4,
+.et-display {
+  font-family: var(--et-font-display);
+  letter-spacing: -0.015em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--et-jade);
+  outline-offset: 2px;
+}

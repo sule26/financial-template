@@ -35,6 +35,31 @@ testes da Fase N−1 vermelhos.
 
 **Nenhum PDF real** (com dados pessoais) entra no repositório. Fixtures são sintéticas.
 
+## Tour visual
+
+Testes de componente não mostram se a tela, montada com dados de verdade, ficou legível. Por isso
+toda task que toca a UI termina com o tour (R14.7):
+
+```
+task ui-tour                 # capturas em /tmp/et-ui-tour (TOUR_DIR=... para mudar)
+```
+
+O que ele faz (`frontend/e2e/tour/ui-tour.spec.ts`, `scripts/ui-tour.sh`):
+
+1. Sobe a imagem de uso num container descartável, com `data/` e `inbox/` temporários.
+2. Cadastra pela API uma casa sintética: 3 pessoas (duas com renda), padrão "Casal" 60/40, conta
+   corrente, cartão principal ligado à conta, adicional usado pelos pais, segundo cartão,
+   cartão de benefício, assinatura, parcelamento, compra recorrente, lançamentos manuais, acerto,
+   meta e investimento; e solta uma fatura sintética na inbox (fica pendente na Revisão).
+3. Visita todas as telas e todas as abas de Cadastros, no tema claro e no escuro, e abre o
+   detalhe do mês na Projeção e os formulários de cartão (novo e edição).
+4. **Falha** se houver erro de console, erro de página ou resposta 5xx da API.
+
+As capturas ficam fora do repositório e são **olhadas** por quem fez a task: colunas cortadas,
+rótulos repetidos ou técnicos, gráficos vazios e textos que não explicam o que fazer são achados
+P1 da task (bloqueiam), mesmo com todos os testes verdes. Ao mudar o modelo de dados, atualize o
+seed do tour para que a tela nova apareça nele.
+
 ## Testes de arquitetura
 
 Um teste (T0.6) percorre os imports de `backend/src/expense_tracker/` e falha se algum módulo importar
@@ -167,7 +192,7 @@ task coverage    # backend com --cov-fail-under=90 e relatório por pacote
 task lint        # ruff, mypy, eslint, tsc
 task trace       # cada R* citado em tasks.md por task [x] tem teste test_r<x>_<y>_*
 task e2e         # sobe o container de uso e roda Playwright
-task ci          # tudo acima + docs-check + pip-audit/npm audit (o que o CI roda)
+task ci          # lint + coverage + trace + docs-check + build + audit (o que o CI roda; e2e à parte)
 ```
 
 Definidos na Fase 0 (T0.4); detalhes em [14](14-operacao.md).
