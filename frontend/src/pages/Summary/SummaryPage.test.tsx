@@ -104,20 +104,17 @@ describe("SummaryPage", () => {
     expect(await screen.findByText("Reserva")).toBeInTheDocument();
     expect(screen.getByText("R$ 200,00 de R$ 500,00")).toBeInTheDocument();
 
-    const states = screen.getByRole("table", {
-      name: "Estado por cartão/conta",
-    });
-    expect(await within(states).findByText("Cartão X")).toBeInTheDocument();
-    expect(within(states).getByText("faltando")).toBeInTheDocument();
-    expect(within(states).getByText("fatura aberta")).toBeInTheDocument();
-    expect(screen.getByText("Fatura/extrato faltando")).toBeInTheDocument();
+    // R14.33: the card/account states left the Resumo (the alerts banner covers them)
+    expect(
+      screen.queryByRole("table", { name: "Estado por cartão/conta" }),
+    ).toBeNull();
   });
 
   it("r1_9 shows committed income of the selected month with its band", async () => {
     mockApi(ROUTES);
     renderPage(<SummaryPage />);
     const table = await screen.findByRole("table", {
-      name: "Renda comprometida no mês",
+      name: "Gasto por pessoa no mês",
     });
     expect(within(table).getByText("Eu")).toBeInTheDocument();
     const badge = within(table).getByText(/70%/);
@@ -125,15 +122,73 @@ describe("SummaryPage", () => {
     expect(badge).toHaveTextContent("atenção");
   });
 
-  it("r1_9 hides committed income when nobody has income in the month", async () => {
+  it("r14_33 'Gasto por pessoa' lists people without income too", async () => {
+    const row = (income: string | null) => ({
+      month: "2026-10",
+      spent: "300.00",
+      income,
+      ratio: income ? "3.33" : null,
+      band: income ? ("green" as const) : null,
+      benefit_spent: "0.00",
+      benefit_income: null,
+      benefit_ratio: null,
+    });
     mockApi({
       ...ROUTES,
-      "GET /api/reports/projection": { months: [], committed_income: [] },
+      "GET /api/reports/projection": {
+        months: [],
+        committed_income: [{ user_id: "eu", months: [row("9000.00")] }],
+        people: [
+          { user_id: "eu", months: [row("9000.00")] },
+          { user_id: "ana", months: [row(null)] },
+        ],
+      },
     });
     renderPage(<SummaryPage />);
-    expect(
-      await screen.findByText("Sem renda cadastrada para out/2026."),
-    ).toBeInTheDocument();
+    const table = await screen.findByRole("table", {
+      name: "Gasto por pessoa no mês",
+    });
+    const ana = within(table).getByText("Ana").closest("tr") as HTMLElement;
+    expect(ana).toHaveTextContent("R$ 300,00");
+    expect(within(ana).getByText("sem renda cadastrada")).toBeInTheDocument();
+    const eu = within(table).getByText("Eu").closest("tr") as HTMLElement;
+    expect(eu).toHaveTextContent("R$ 9.000,00");
+    expect(eu).toHaveTextContent("3,33%");
+  });
+
+  it("r14_36 annual tables by category and card, current month marked, totals with/without benefit", async () => {
+    mockApi({
+      ...ROUTES,
+      "GET /api/reports/summary": {
+        ...SUMMARY,
+        annual_by_card: {
+          "2026-09": { card_x: "800.00" },
+          "2026-10": { card_x: "1200.00", acc_x: "300.00" },
+        },
+        annual_benefit: { "2026-09": "0.00", "2026-10": "300.00" },
+      },
+    });
+    renderPage(<SummaryPage />);
+    const byCard = await screen.findByRole("table", {
+      name: "Resumo anual por cartão/conta",
+    });
+    expect(await within(byCard).findByText("Cartão X")).toBeInTheDocument();
+    // today is 2026-10-12 in tests
+    const head = within(byCard).getByRole("columnheader", { name: "out/2026" });
+    expect(head).toHaveAttribute("aria-current", "date");
+    expect(head).toHaveClass("et-current-month");
+    const without = within(byCard)
+      .getByText("Total sem benefício")
+      .closest("tr") as HTMLElement;
+    expect(without).toHaveTextContent("R$ 1.200,00"); // 1500 − 300 in October
+    const withB = within(byCard)
+      .getByText("Total com benefício")
+      .closest("tr") as HTMLElement;
+    expect(withB).toHaveTextContent("R$ 1.500,00");
+    const byCat = screen.getByRole("table", {
+      name: "Resumo anual por categoria",
+    });
+    expect(within(byCat).getByText("Total sem benefício")).toBeInTheDocument();
   });
 
   it("r5_5 r11_4 filters change the summary query string", async () => {
@@ -159,7 +214,7 @@ describe("SummaryPage", () => {
       screen.getByRole("textbox", { name: "Meio de pagamento" }),
     );
     await userEvent.click(
-      await screen.findByRole("option", { name: "Benefício (VR/VA)" }),
+      await screen.findByRole("option", { name: "Cartão de benefícios" }),
     );
     await waitFor(() =>
       expect(summaryCalls()).toContain(
@@ -196,7 +251,8 @@ describe("SummaryPage", () => {
     expect(
       await screen.findByText("Sem gastos neste mês."),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Sem gastos no período.")).toHaveLength(2);
+    // by card, by payment method and the category history (R14.37)
+    expect(screen.getAllByText("Sem gastos no período.")).toHaveLength(3);
     expect(screen.getByText("Sem gastos no ano.")).toBeInTheDocument();
     expect(screen.queryByText("Metas de poupança")).not.toBeInTheDocument();
   });
@@ -246,5 +302,46 @@ describe("SummaryPage dynamic catalog", () => {
       name: "Gastos por categoria",
     });
     expect(await within(cats).findByText("Pets")).toBeInTheDocument();
+  });
+});
+
+describe("Histórico por categoria (R14.37)", () => {
+  const withCats = {
+    ...SUMMARY,
+    series: [
+      month("2026-09", "800.00", { by_category: { cat_casa: "200.00" } }),
+      month("2026-10", "1500.00", {
+        by_category: { cat_casa: "1000.00", __none__: "500.00" },
+      }),
+    ],
+  };
+
+  it("r14_37 with nothing chosen shows every category, and the month shares in the list", async () => {
+    mockApi({ ...ROUTES, "GET /api/reports/summary": withCats });
+    renderPage(<SummaryPage />);
+    const summary = await screen.findByLabelText("Resumo do histórico");
+    // every category: (200 in September + 1500 in October) / 2 months
+    expect(summary).toHaveTextContent("R$ 850,00");
+    expect(summary).toHaveTextContent("todas (2)");
+    // "Gastos por categoria": Casa is 1000 of 1500 in October
+    const cats = screen.getByRole("table", { name: "Gastos por categoria" });
+    const casa = (
+      await within(cats).findByRole("button", { name: "Ver histórico de Casa" })
+    ).closest("tr") as HTMLElement;
+    expect(casa).toHaveTextContent("67%");
+  });
+
+  it("r14_37 clicking a category in 'Gastos por categoria' shows its history", async () => {
+    mockApi({ ...ROUTES, "GET /api/reports/summary": withCats });
+    renderPage(<SummaryPage />);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Ver histórico de Sem categoria",
+      }),
+    );
+    const summary = screen.getByLabelText("Resumo do histórico");
+    // 0 + 500 over 2 months; 500 of 2300 = 21,7%
+    expect(summary).toHaveTextContent("R$ 250,00");
+    expect(summary).toHaveTextContent("21,7%");
   });
 });

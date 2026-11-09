@@ -161,7 +161,10 @@ dias não cobertos, os manuais provisórios daquele intervalo.
 
 `M < H(cartão)` sem documento ativo → o mês é marcado `faltando`: mostra a projeção com destaque
 ("fatura de 2026-08 não importada"), aparece na tela Status, e os saldos "a receber" daquele mês
-ficam marcados como incompletos.
+ficam marcados como incompletos. O aviso global "Fatura faltando" só aparece quando o cartão já estava em
+uso naquele mês (R14.31): há fatura importada de um mês anterior ou um lançamento manual no próprio mês.
+Previsões sozinhas ou lançamentos de outros meses não contam (apagar a única fatura do cartão não deixa
+aviso).
 
 ## Projeção de 12 meses
 
@@ -204,13 +207,16 @@ o valor inteiro, quando a parte é menor). API: `GET /api/reports/month-items?ca
 
 | Painel | Cálculo |
 |--------|---------|
-| Pizza por categoria | Σ gasto do mês selecionado por categoria; itens sem categoria (R1.12) aparecem como "Sem categoria" |
+| Pizza por categoria | Σ gasto do mês selecionado por categoria; itens sem categoria (R1.12) aparecem como "Sem categoria". Clicar numa categoria abre o histórico dela (R14.37) |
+| Histórico por categoria (R14.37) | Uma ou várias categorias (abre na maior do mês): por mês, Σ gasto delas e, em cima da barra, a % do gasto do mês; embaixo, a média por mês e a % do total dos 12 meses |
 | Gasto x renda | Por mês: gasto das pessoas selecionadas (suas partes) vs renda vigente delas; sem pessoa selecionada, gasto total vs **renda da casa** (soma da renda de todos os usuários, R14.6) |
 | Empilhado por cartão | Por mês: Σ gasto por cartão; cada conta aparece como uma série |
 | Por meio de pagamento (R11.4) | Por mês: Σ gasto por `payment_method` (crédito, benefício, débito/PIX/transferência/boleto, dinheiro); filtro disponível em todos os painéis |
-| Resumo anual | Σ gasto por categoria × mês do ano selecionado, com total |
+| Resumo anual (R14.36) | Duas tabelas do ano selecionado: por categoria e por cartão/conta (cartões de benefício marcados). Rodapé: **total sem benefício** (o principal) e total com benefício. O mês atual tem uma cor leve e, em tela estreita, a tabela abre rolada até ele; o nome da linha fica fixo ao rolar |
 | Metas de poupança | Meta cumprida no mês = Σ aportes do mês nos investimentos vinculados à meta ([15](15-investimentos.md)); sobra = renda − gasto − aportes |
-| Renda comprometida (R1.9) | Por usuário com renda, por mês: `Σ parte do usuário nos gastos ÷ renda vigente`. Meses futuros usam a projeção. Gastos no benefício são comparados com a renda em benefício e mostrados à parte. Faixas: < 50% verde, 50–80% amarelo, > 80% vermelho (configurável). Sem renda no mês: não exibe |
+| Gasto por pessoa (R1.9, R14.33) | Todas as pessoas: a parte de cada uma nos gastos do mês; quem tem renda mostra também a renda comprometida, quem não tem mostra "sem renda cadastrada". Por usuário com renda, por mês: `Σ parte do usuário nos gastos ÷ renda vigente`. Meses futuros usam a projeção. Gastos no benefício são comparados com a renda em benefício e mostrados à parte. Faixas: < 50% verde, 50–80% amarelo, > 80% vermelho (configurável). Na Projeção, só aparece quem tem renda |
+
+O painel "Cartões e contas" saiu do Resumo (R14.33): o banner de avisos já mostra fatura/extrato faltando.
 
 "Gasto" = `kind` que conta como gasto ([04](04-modelo-de-dados.md#transactionsjson)). Com filtro de
 usuário, cada lançamento entra com a parte dele (`amount × pct`, arredondado como em

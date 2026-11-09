@@ -52,3 +52,7 @@ test-results/
 
 # Hypothesis example database (local test cache)
 .hypothesis/
+
+# test coverage output and temporary tour copies (never commit)
+frontend/coverage/
+/.tour-*.png

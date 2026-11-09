@@ -59,6 +59,8 @@ class ManualEntry(BaseModel):
     # R14.26: payment of a conta da casa / subscription; the bill month (default: invoice month)
     subscription_id: str | None = None
     subscription_month: Month | None = None
+    # R14.32: which benefit of the benefit card paid it (VR, Home office…)
+    benefit_id: str | None = None
 
 
 class TransactionPatch(BaseModel):
@@ -76,6 +78,7 @@ class TransactionPatch(BaseModel):
     payment_method: PaymentMethod | None = None
     card_id: str | None = None
     account_id: str | None = None
+    benefit_id: str | None = None  # R14.32
 
 
 @dataclass
@@ -178,6 +181,74 @@ class Transactions:
                 "method_not_allowed", f"{method.value} not allowed on a {acc.type} account"
             )
 
+    def _check_benefit(
+        self, method: PaymentMethod, account_id: str | None, benefit_id: str | None
+    ) -> None:
+        """R14.32: the benefit must be one credited on that benefit card."""
+        if benefit_id is None:
+            return
+        benefit = self.repo.get("benefits", benefit_id)
+        if (
+            method is not PaymentMethod.BENEFIT
+            or benefit is None
+            or benefit.destination != "card"
+            or benefit.account_id != account_id
+        ):
+            raise Invalid(
+                "invalid_benefit", "benefit_id must be a benefit credited on this benefit card"
+            )
+
+    def _default_split(
+        self,
+        own: Any,
+        description: str,
+        amount: Any,
+        card_id: str | None,
+        account_id: str | None,
+        category_id: str | None,
+    ) -> tuple[Any, str]:
+        """R14.16: what "Padrão" resolves to now (docs/08 levels 3–5)."""
+        d = apply_precedence(
+            RuleInput(description, amount, card_id, account_id),
+            own,
+            self.repo.all("rules"),
+            manual_category=category_id,
+        )
+        return d.allocations, d.allocation_origin
+
+    def freeze_default_splits(self) -> int:
+        """One-off at startup: manual entries saved on "Padrão" before R14.16 get the split they
+        show today, so later rules no longer change their months. Returns how many."""
+        pending = [
+            tx
+            for tx in self.repo.all("transactions")
+            if tx.source.type == "manual" and tx.allocations is None
+        ]
+        if not pending:
+            return 0
+        self.repo.backup(reason="padrao-freeze")  # data migration: keep a copy first
+        ledger = self._ledger()
+        frozen = 0
+        with self.repo.batch():
+            for tx in pending:
+                try:
+                    own = (
+                        ledger.card_ownership(tx.card_id)
+                        if tx.card_id
+                        else ledger.account_ownership(tx.account_id or "")
+                    )
+                except AllocationError:
+                    continue
+                alloc, origin = self._default_split(
+                    own, tx.description, tx.amount, tx.card_id, tx.account_id, tx.category_id
+                )
+                self.repo.put(
+                    "transactions",
+                    tx.model_copy(update={"allocations": alloc, "allocation_origin": origin}),
+                )
+                frozen += 1
+        return frozen
+
     def create_manual(self, entry: ManualEntry) -> dict[str, Any]:
         cat = self.catalog
         if entry.kind.value in CATEGORY_KINDS and not entry.category_id:
@@ -187,7 +258,16 @@ class Transactions:
         cat._need("recurring_purchases", entry.recurring_purchase_id, "recurring_purchase_id")
         cat._need("subscriptions", entry.subscription_id, "subscription_id")
         ledger = self._ledger()
-        self._ownership(ledger, entry.payment_method, entry.card_id, entry.account_id)
+        own = self._ownership(ledger, entry.payment_method, entry.card_id, entry.account_id)
+        self._check_benefit(entry.payment_method, entry.account_id, entry.benefit_id)
+        # R14.16: "Padrão" is frozen now, like an imported line (rule that matches, else owners),
+        # so a rule created later never rewrites months already settled.
+        alloc, alloc_origin = (
+            (entry.allocations, "manual")
+            if entry.allocations is not None
+            else self._default_split(own, entry.description, entry.amount, entry.card_id,
+                                     entry.account_id, entry.category_id)
+        )  # fmt: skip
         if entry.payment_method is PaymentMethod.CREDIT:
             assert entry.card_id is not None
             account_id = None
@@ -249,10 +329,11 @@ class Transactions:
                 description=entry.description,
                 amount=entry.amount,
                 category_id=entry.category_id,
-                allocations=entry.allocations,
-                allocation_origin="manual" if entry.allocations is not None else None,
+                allocations=alloc,
+                allocation_origin=alloc_origin,
                 note=entry.note,
                 created_at=self.now(),
+                benefit_id=entry.benefit_id,
             )
         except ValidationError as exc:
             raise Invalid("invalid_transaction", str(exc)) from exc
@@ -324,8 +405,25 @@ class Transactions:
             if key in changes:
                 update[key] = getattr(patch, key)
         if "allocations" in changes:
-            update["allocations"] = patch.allocations
-            update["allocation_origin"] = "manual"
+            if patch.allocations is not None:
+                update["allocations"] = patch.allocations
+                update["allocation_origin"] = "manual"
+            else:
+                # R14.16: back to "Padrão" = the rule that matches, else the owners (frozen)
+                method = PaymentMethod(changes.get("payment_method") or tx.payment_method)
+                card = changes.get("card_id", tx.card_id)
+                account = changes.get("account_id", tx.account_id)
+                own = self._ownership(self._ledger(), method, card, account)
+                alloc, origin = self._default_split(
+                    own,
+                    changes.get("description") or tx.description,
+                    patch.amount or tx.amount,
+                    card if method is PaymentMethod.CREDIT else None,
+                    account if method is not PaymentMethod.CREDIT else None,
+                    changes.get("category_id", tx.category_id),
+                )
+                update["allocations"] = alloc
+                update["allocation_origin"] = origin
         moving = {"payment_method", "card_id", "account_id"} & changes.keys()
         if moving:
             method = changes.get("payment_method") or tx.payment_method
@@ -338,9 +436,19 @@ class Transactions:
             )
             self._check_target(method, card_id, account_id)
             update.update(payment_method=method, card_id=card_id, account_id=account_id)
+            if "benefit_id" not in changes:
+                # another card or method: the old benefit no longer applies
+                update["benefit_id"] = None
             if "provisional" not in changes:
                 # same rule as a new entry: only cash is final right away
                 update["provisional"] = method is not PaymentMethod.CASH
+        if "benefit_id" in changes:
+            self._check_benefit(
+                PaymentMethod(update.get("payment_method", tx.payment_method)),
+                update.get("account_id", tx.account_id),
+                patch.benefit_id,
+            )
+            update["benefit_id"] = patch.benefit_id
         if moving or ("purchase_date" in changes and patch.purchase_date is not None):
             when = patch.purchase_date or tx.purchase_date
             update["purchase_date"] = when

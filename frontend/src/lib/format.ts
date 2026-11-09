@@ -43,7 +43,7 @@ export function formatDate(iso: string | null | undefined): string {
 
 export const METHOD_LABELS: Record<string, string> = {
   credit: "Crédito",
-  benefit: "Benefício (VR/VA)",
+  benefit: "Cartão de benefícios",
   debit: "Débito",
   pix: "PIX",
   transfer: "Transferência",

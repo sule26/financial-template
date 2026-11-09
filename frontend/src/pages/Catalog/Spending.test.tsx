@@ -333,6 +333,7 @@ describe("Subscriptions tab", () => {
       price_history: [],
       pauses: [],
       allocation_history: [],
+      benefit_id: null,
       group: "subscription",
       due_day: null,
     });
@@ -429,6 +430,7 @@ describe("Recurring purchases tab", () => {
       estimated_amount: "250.00",
       every: { value: 6, unit: "weeks" },
       last_date: "2026-09-01",
+      day_of_month: null,
       payment_method: "credit",
       card_id: "card_x",
       account_id: null,
@@ -438,6 +440,7 @@ describe("Recurring purchases tab", () => {
       price_history: [],
       pauses: [],
       allocation_history: [],
+      benefit_id: null,
       group: "purchase",
     });
   });
@@ -599,7 +602,132 @@ describe("gastos recorrentes: próxima data e todo dia X (R14.30)", () => {
     await waitFor(() => expect(lastBody(calls, "PUT")).toBeDefined());
     expect(lastBody(calls, "PUT")).toMatchObject({
       every: { value: 1, unit: "months" },
-      last_date: "2026-08-31", // no 31/09: anchored on 31/08 so October is 31/10
+      last_date: "2026-09-01", // the last purchase stays as it was
+      day_of_month: 31,
     });
+  });
+});
+
+describe("gastos recorrentes: categoria na lista (R14.34)", () => {
+  it("r14_34 the list shows each recurring expense's category", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/recurring-purchases": [
+        RECURRING,
+        {
+          ...RECURRING,
+          id: "rec_y",
+          description: "SEM CAT",
+          category_id: null,
+        },
+      ],
+    });
+    open("recorrentes");
+    const row = (await screen.findByText("Ração dos gatos")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(within(row).getByText("Casa")).toBeInTheDocument();
+    const other = screen.getByText("SEM CAT").closest("tr") as HTMLElement;
+    expect(within(other).getByText("sem categoria")).toBeInTheDocument();
+  });
+});
+
+describe("assinatura paga com cartão de benefícios (R14.32)", () => {
+  const CAJU = {
+    id: "acc_caju",
+    name: "Caju",
+    type: "benefit",
+    owners: [{ user_id: "eu", pct: "100.00" }],
+    responsible_user_id: "eu",
+    profile_id: null,
+    account_hint: null,
+    confirm_manual_after_days: null,
+  };
+  const benefit = (id: string, name: string) => ({
+    id,
+    name,
+    user_id: "eu",
+    destination: "card",
+    account_id: "acc_caju",
+    amount_history: [],
+    active: true,
+  });
+
+  it("r14_32 picks which benefit of the card pays the subscription", async () => {
+    const { calls } = mockApi({
+      ...CATALOG,
+      "GET /api/accounts": [...CATALOG["GET /api/accounts"], CAJU],
+      "GET /api/benefits": [
+        benefit("ben_vr", "VR"),
+        benefit("ben_ho", "Home office"),
+      ],
+      "GET /api/subscriptions": [
+        {
+          ...SUBSCRIPTION,
+          payment_method: "benefit",
+          card_id: null,
+          account_id: "acc_caju",
+        },
+      ],
+      "PUT /api/subscriptions/sub_netflix": (body: unknown) => body,
+    });
+    open("assinaturas");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Netflix" }),
+    );
+    const modal = await dialog();
+    await userEvent.click(
+      await within(modal).findByRole("textbox", { name: /Qual benefício/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Home office" }),
+    );
+    await save(modal);
+    await waitFor(() => expect(lastBody(calls, "PUT")).toBeDefined());
+    expect(lastBody(calls, "PUT")).toMatchObject({
+      payment_method: "benefit",
+      account_id: "acc_caju",
+      benefit_id: "ben_ho",
+    });
+  });
+
+  it("r14_32 a benefit card without benefits says how to link them", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/accounts": [...CATALOG["GET /api/accounts"], CAJU],
+      "GET /api/benefits": [],
+      "GET /api/subscriptions": [
+        {
+          ...SUBSCRIPTION,
+          payment_method: "benefit",
+          card_id: null,
+          account_id: "acc_caju",
+        },
+      ],
+    });
+    open("assinaturas");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Netflix" }),
+    );
+    const modal = await dialog();
+    expect(
+      await within(modal).findByText(/ainda não tem benefícios ligados/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("gastos recorrentes: intervalo 'todo dia X' na lista (R14.34)", () => {
+  it("r14_34 shows 'todo dia X' instead of 'a cada 1 meses'", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/recurring-purchases": [
+        { ...RECURRING, every: { value: 1, unit: "months" }, day_of_month: 10 },
+      ],
+    });
+    open("recorrentes");
+    const row = (await screen.findByText("Ração dos gatos")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(within(row).getByText("todo dia 10")).toBeInTheDocument();
   });
 });

@@ -38,6 +38,45 @@ function Notice({
   );
 }
 
+const UNCATEGORIZED_PLACES: Record<
+  string,
+  { one: string; many: string; to: string }
+> = {
+  transactions: {
+    one: "lançamento",
+    many: "lançamentos",
+    to: "/lancamentos?uncategorized=1",
+  },
+  installment_plans: {
+    one: "parcelamento",
+    many: "parcelamentos",
+    to: "/lancamentos?tab=parcelamentos",
+  },
+  subscriptions: {
+    one: "assinatura",
+    many: "assinaturas",
+    to: "/cadastros?tab=assinaturas",
+  },
+  recurring_purchases: {
+    one: "gasto recorrente",
+    many: "gastos recorrentes",
+    to: "/cadastros?tab=recorrentes",
+  },
+};
+
+/** "2 lançamentos", "1 parcelamento"…, each linking to where it is fixed. */
+export function uncategorizedLinks(
+  items: Record<string, string[]>,
+): { label: string; to: string }[] {
+  return Object.entries(items).flatMap(([coll, ids]) => {
+    const p = UNCATEGORIZED_PLACES[coll];
+    if (!p || ids.length === 0) return [];
+    return [
+      { label: `${ids.length} ${ids.length === 1 ? p.one : p.many}`, to: p.to },
+    ];
+  });
+}
+
 /** Global banner (docs/03): uncategorized items, overdue recurring, missing invoices, files. */
 export function AlertsBanner() {
   const { data } = useAlerts();
@@ -59,10 +98,15 @@ export function AlertsBanner() {
               icon={IconTagOff}
               title={`${a.count} itens sem categoria`}
             >
-              Uma categoria foi removida.{" "}
-              <Anchor component={Link} to="/lancamentos?uncategorized=1">
-                Recategorizar agora
-              </Anchor>
+              {/* where each one is, so it can be fixed there */}
+              {uncategorizedLinks(a.items ?? {}).map((l, k) => (
+                <span key={l.to}>
+                  {k > 0 ? " · " : ""}
+                  <Anchor component={Link} to={l.to}>
+                    {l.label}
+                  </Anchor>
+                </span>
+              ))}
             </Notice>
           );
         if (a.type === "recurring_overdue")

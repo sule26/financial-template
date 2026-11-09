@@ -63,6 +63,7 @@ def create_app(
         from expense_tracker.services.catalog import Catalog
 
         Catalog(repository).seed_defaults()
+        context.transactions.freeze_default_splits()  # R14.16, once per old entry
         app.state.ctx = context
         engine = SyncEngine(repository, settings, clock)
         service = SyncService(engine, settings.scan_interval_seconds, settings.enable_watcher)

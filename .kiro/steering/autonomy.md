@@ -10,7 +10,7 @@ Autorização explícita do operador (2026-10-12), válida para qualquer agente 
   specs, configs, Taskfile, Dockerfile, compose, perfis de exemplo, fixtures sintéticas).
 - Usar **Docker** e **docker compose** à vontade: build de imagens, containers descartáveis, subir e
   derrubar a stack local, rodar todos os testes, lint, cobertura, e2e.
-- Rodar `task <qualquer>` e criar/alterar tasks no `Taskfile.yml`.
+- Rodar `task <qualquer>` e criar/alterar tasks no `Taskfile.yaml`.
 - Instalar dependências **dentro dos containers** (pinadas, licença permissiva).
 - Ir e voltar quantas vezes precisar: implementar, testar, revisar, refatorar, até todas as tasks de
   `specs/expense-tracker-web/tasks.md` estarem corretas e validadas.

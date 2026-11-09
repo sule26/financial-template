@@ -129,6 +129,119 @@ describe("QuickEntry", () => {
     );
   });
 
+  it("r14_32 on a card with several benefits, picks which one paid it", async () => {
+    const benefit = (id: string, name: string) => ({
+      id,
+      name,
+      user_id: "eu",
+      destination: "card",
+      account_id: "acc_vr",
+      amount_history: [],
+      active: true,
+    });
+    const { calls } = mockApi({
+      ...CATALOG,
+      "GET /api/accounts": ACCOUNTS,
+      "GET /api/benefits": [
+        benefit("ben_vr", "VR"),
+        benefit("ben_ho", "Home office"),
+      ],
+      "GET /api/transactions/suggest": {
+        ...SUGGEST,
+        category_id: null,
+        allocations: null,
+      },
+      "POST /api/transactions": {
+        transaction: { id: "tx1" },
+        reconciliation: { status: "projected" },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage(<QuickEntryButton />);
+    await openForm(user);
+    expect(
+      screen.queryByRole("textbox", { name: /Qual benefício/ }),
+    ).toBeNull();
+    await pick(user, /Meio de pagamento/, "Cartão de benefícios");
+    await user.type(screen.getByRole("textbox", { name: /Valor/ }), "30,00");
+    await user.type(
+      screen.getByRole("textbox", { name: /Descrição/ }),
+      "Almoço",
+    );
+    await pick(user, /Categoria/, "Casa");
+    await pick(user, /Qual benefício/, "Home office");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "POST")).toBe(true),
+    );
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      payment_method: "benefit",
+      account_id: "acc_vr",
+      benefit_id: "ben_ho",
+    });
+  });
+
+  it("r14_32 switching to another benefit card drops the benefit chosen before", async () => {
+    const benefit = (id: string, name: string, account: string) => ({
+      id,
+      name,
+      user_id: "eu",
+      destination: "card",
+      account_id: account,
+      amount_history: [],
+      active: true,
+    });
+    const { calls } = mockApi({
+      ...CATALOG,
+      "GET /api/accounts": [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[ACCOUNTS.length - 1], id: "acc_va", name: "VA" },
+      ],
+      "GET /api/benefits": [
+        benefit("ben_vr", "VR", "acc_vr"),
+        benefit("ben_ho", "Home office", "acc_vr"),
+      ],
+      "GET /api/transactions/suggest": {
+        ...SUGGEST,
+        category_id: null,
+        allocations: null,
+      },
+      "POST /api/transactions": {
+        transaction: { id: "tx1" },
+        reconciliation: { status: "projected" },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage(<QuickEntryButton />);
+    await openForm(user);
+    await pick(user, /Meio de pagamento/, "Cartão de benefícios");
+    await pick(user, /Qual benefício/, "Home office");
+    await pick(user, /Cartão de benefício/, "VA");
+    // VA has no benefit linked: no picker, and nothing is left from the other card
+    expect(
+      await screen.findByText(/ainda não tem benefícios ligados/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /Qual benefício/ }),
+    ).toBeNull();
+    await user.type(screen.getByRole("textbox", { name: /Valor/ }), "30,00");
+    await user.type(
+      screen.getByRole("textbox", { name: /Descrição/ }),
+      "Mercado",
+    );
+    await pick(user, /Categoria/, "Casa");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "POST")).toBe(true),
+    );
+    const body = calls.find((c) => c.method === "POST")?.body as Record<
+      string,
+      unknown
+    >;
+    expect(body.account_id).toBe("acc_va");
+    expect(body).not.toHaveProperty("benefit_id");
+  });
+
   it("r1_11 blocks submission without category", async () => {
     const { calls } = mockApi({
       ...CATALOG,

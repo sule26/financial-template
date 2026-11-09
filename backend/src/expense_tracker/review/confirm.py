@@ -17,6 +17,7 @@ from expense_tracker.domain.models import (
     Kind,
     Movement,
     Origin,
+    PaymentMethod,
     Settlement,
     Suggestion,
     Transaction,
@@ -269,10 +270,26 @@ class Confirmer:
             links["subscription_month"] = manual.links.subscription_month or manual.invoice_month
         if links:
             result["links"] = links
+        # R14.32: the benefit chosen on the manual entry stays on the imported line
+        if manual.benefit_id and tx.payment_method is PaymentMethod.BENEFIT:
+            result["benefit_id"] = manual.benefit_id
         return result
+
+    def _linked_benefit(self, tx: Transaction, item: Any) -> dict[str, Any]:
+        """R14.32: a line linked to a subscription/recurring paid with benefit takes its benefit."""
+        benefit = getattr(item, "benefit_id", None) if item is not None else None
+        if (
+            benefit
+            and tx.benefit_id is None
+            and tx.payment_method is PaymentMethod.BENEFIT
+            and getattr(item, "account_id", None) == tx.account_id
+        ):
+            return {"benefit_id": benefit}
+        return {}
 
     def _do_link_recurring(self, tx: Transaction, s: Suggestion) -> dict[str, Any]:
         rec = self.repo.get("recurring_purchases", s.target_id)
+        extra = self._linked_benefit(tx, rec)
         if rec is not None and rec.group == "household":
             # R14.26: a bill keeps its due dates; the line pays the bill of the nearest one
             from expense_tracker.domain.recurrence import bill_month
@@ -281,14 +298,16 @@ class Confirmer:
                 "links": {
                     "recurring_purchase_id": s.target_id,
                     "recurring_month": bill_month(rec, tx.purchase_date),
-                }
+                },
+                **extra,
             }
         if rec is not None and tx.purchase_date > rec.last_date:
             self.repo.put("recurring_purchases", reanchor(rec, tx.purchase_date))
-        return {"links": {"recurring_purchase_id": s.target_id}}
+        return {"links": {"recurring_purchase_id": s.target_id}, **extra}
 
     def _do_link_subscription(self, tx: Transaction, s: Suggestion) -> dict[str, Any]:
-        return {"links": {"subscription_id": s.target_id}}
+        sub = self.repo.get("subscriptions", s.target_id)
+        return {"links": {"subscription_id": s.target_id}, **self._linked_benefit(tx, sub)}
 
     def _do_invoice_payment(self, tx: Transaction, s: Suggestion) -> dict[str, Any]:
         entry = self.repo.get("import_manifest", s.target_id)

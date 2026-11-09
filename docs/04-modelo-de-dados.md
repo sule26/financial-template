@@ -347,3 +347,12 @@ Planos, acertos e movimentações de investimento criados a partir de uma linha 
    principal, `invoice_month`). Um documento novo ainda em revisão com `supersedes_candidate` não conta
    até a substituição ser aprovada ([05](05-sincronizacao.md#substituição-de-fatura)).
 7. Fingerprints são únicos por cartão/conta entre lançamentos ativos (staging + transactions).
+
+### Campos novos (R14.30–R14.37)
+
+| Onde | Campo | Significado |
+|------|-------|-------------|
+| `recurring_purchases` | `day_of_month` (1–31, opcional) | "Todo dia X do mês": só com intervalo em meses; as ocorrências caem no dia X (último dia em mês curto) e uma compra real em outro dia reancora no dia X mais próximo (R14.30) |
+| `transactions`, `subscriptions`, `recurring_purchases` | `benefit_id` (opcional) | Qual benefício do cartão de benefícios paga (R14.32); só com `payment_method = benefit` e um benefício `destination = card` daquele cartão. Mantido quando a linha do extrato absorve o lançamento manual; uma linha vinculada a assinatura/recorrente herda o dele |
+| `GET /api/reports/summary` | `series[].by_category`, `annual_by_card`, `annual_benefit` | Histórico por categoria (R14.37) e Resumo anual por cartão/conta com totais sem/com benefício (R14.36) |
+| `GET /api/reports/projection` | `people` | Todas as pessoas (com ou sem renda), para "Gasto por pessoa"; `committed_income` continua só com quem tem renda (R14.33) |

@@ -104,8 +104,7 @@ describe("Summary KPIs", () => {
     expect(await screen.findByText("R$ 10.000,00")).toBeInTheDocument();
     const leftover = screen.getByText("R$ 8.500,00");
     expect(leftover).toHaveAttribute("data-tone", "positive");
-    expect(
-      screen.getByText("Nenhum cartão ou conta com movimento no mês."),
-    ).toBeInTheDocument();
+    // R14.33: no "Cartões e contas" panel on the Resumo any more
+    expect(screen.queryByText("Cartões e contas")).not.toBeInTheDocument();
   });
 });

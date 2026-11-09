@@ -51,7 +51,7 @@ export const EN: Record<string, string> = {
   "Gastos por categoria": "Spending by category",
   "Gasto x renda (12 meses)": "Spending vs income (12 months)",
   "Renda comprometida": "Income committed",
-  "Cartões e contas": "Cards and accounts",
+  "Gasto por pessoa": "Spending per person",
   "Por cartão/conta": "By card/account",
   "Por meio de pagamento": "By payment method",
   "Metas de poupança": "Savings goals",

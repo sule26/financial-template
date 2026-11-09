@@ -687,3 +687,54 @@ def test_r14_26_match_manual_keeps_the_bill_link_and_month(w: World) -> None:
     confirm(w, "a")
     links = got(w, "a").links
     assert (links.subscription_id, links.subscription_month) == ("sub_luz", "2026-09")
+
+
+def test_r14_32_benefit_survives_match_manual_and_comes_from_a_linked_subscription(
+    w: World,
+) -> None:
+    from expense_tracker.domain.models import Benefit, Links, PaymentMethod
+
+    w.catalog.create(
+        "accounts",
+        {"id": "acc_vr", "name": "Caju", "type": "benefit",
+         "owners": [{"user_id": ME, "pct": "100"}], "responsible_user_id": ME},
+    )  # fmt: skip
+    for bid in ("ben_vr", "ben_ho"):
+        w.repo.put(
+            "benefits",
+            Benefit(id=bid, name=bid, user_id=ME, destination="card", account_id="acc_vr"),
+        )
+    manual = Transaction(
+        id="man",
+        source=Source(type="manual"),
+        payment_method=PaymentMethod.BENEFIT,
+        account_id="acc_vr",
+        purchase_date=date(2026, 9, 20),
+        invoice_month="2026-09",
+        description="ALMOCO",
+        amount=D("10.00"),
+        category_id=FOOD,
+        benefit_id="ben_ho",
+        links=Links(),
+    )
+    w.repo.put("transactions", manual)
+    staged(
+        w, "a", Suggestion(type="match_manual", target_id="man"),
+        card_id=None, account_id="acc_vr", payment_method=PaymentMethod.BENEFIT,
+        invoice_month="2026-09",
+    )  # fmt: skip
+    confirm(w, "a")
+    assert got(w, "a").benefit_id == "ben_ho"
+
+    w.catalog.create(
+        "subscriptions",
+        {"id": "sub_b", "description": "ACADEMIA", "amount": "10.00", "start_month": "2026-01",
+         "payment_method": "benefit", "account_id": "acc_vr", "benefit_id": "ben_vr"},
+    )  # fmt: skip
+    staged(
+        w, "b", Suggestion(type="link_subscription", target_id="sub_b"),
+        card_id=None, account_id="acc_vr", payment_method=PaymentMethod.BENEFIT,
+        invoice_month="2026-09", fingerprint="fp_b2",
+    )  # fmt: skip
+    confirm(w, "b")
+    assert got(w, "b").benefit_id == "ben_vr"

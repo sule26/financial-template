@@ -9,9 +9,9 @@ Desvios e decisões tomadas durante a task vão numa linha `Notas:` logo abaixo 
 ## Fase 0 — Fundação
 - [x] T0.2 Backend: `pyproject.toml` com versões pinadas, app FastAPI com `/api/health`, pytest + gate de 90%, `Clock` injetável
 - [x] T0.3 Frontend: Vite + React + TS + Mantine + Router + TanStack Query, layout com navegação e banner de alertas globais
-- [x] T0.4 `Dockerfile` multi-stage (build do front → imagem Python não-root), `docker-compose.yml` (dev e uso, porta só em 127.0.0.1, rootfs read-only, `cap_drop: ALL`), `Taskfile.yml` (`test`, `coverage`, `lint`, `trace`, `docs-check`, `ci`, `up`, `down`, `dev`, `build`, `e2e`, `backup`) — depends on: T0.2, T0.3
+- [x] T0.4 `Dockerfile` multi-stage (build do front → imagem Python não-root), `compose.yaml` (dev e uso, porta só em 127.0.0.1, rootfs read-only, `cap_drop: ALL`), `Taskfile.yaml` (`test`, `coverage`, `lint`, `trace`, `docs-check`, `ci`, `up`, `down`, `dev`, `build`, `e2e`, `backup`) — depends on: T0.2, T0.3
 - [x] T0.1 Validar a estrutura criada no planejamento (`.gitignore`, `AGENTS.md`, `CLAUDE.md`, `docs/`, `specs/`) com `task docs-check` — depends on: T0.4
-- [x] T0.5 CI (GitHub Actions, `.github/workflows/ci.yml`) rodando `task ci` — depends on: T0.4
+- [x] T0.5 CI (GitHub Actions, `.github/workflows/ci.yaml`) rodando `task ci` — depends on: T0.4
 - [x] T0.6 Teste de arquitetura (direção das dependências; `domain` sem I/O) e builders de fixtures — depends on: T0.2
 
 ## Fase 1 — Armazenamento e domínio
@@ -157,5 +157,21 @@ Verificação: testes escritos pelo mesmo agente que implementou (ambiente sem s
   Notas: `RecurringPurchase.group = household` (ocorrência = vencimento; pagar não reancora; `links.recurring_month`); `allocation_history` em assinaturas e gastos recorrentes, editor "Mudanças de divisão". Testes `test_r14_26_*`, `test_r14_27_*`, `r14_27_*`.
 - [x] T7.18 A receber por pessoa e período, Previsto por mês e pessoa (3 meses), último reajuste como preço principal (R14.15, R14.28)
   Notas: abas por pessoa (confirmado + previsto, filtra saldos), Vencimento (padrão: próximo mês; vencidos sempre aparecem), totais por pessoa clicáveis; Previsto = este mês + 2; achados da 2ª revisão (conta da casa: pendente/alerta/Desativar pelo mês não pago, linha da Revisão marca o mês sem mover datas, divisão pelo mês da conta). Testes `r14_28_*`, `r14_15_*`, `test_r14_26_*`, `test_r14_27_*`.
-- [ ] T7.19 Previstos do mês em Lançamentos; próxima data e "todo dia X" em Gastos recorrentes (R14.29, R14.30)
-  Notas: painel "Previstos neste mês" (parcelas, assinaturas, recorrentes) a partir de `month-items`; "Próxima" calculada (conta da casa: primeiro vencimento a partir deste mês); "Todo dia X" = a cada 1 mês ancorado no dia X. Testes `r14_29_*`, `r14_30_*`. Pendente (3ª revisão): "todo dia X" deriva após compra real em outro dia (guardar o dia); âncora recuada não pode prever de novo a última compra; "Próxima" deve pular datas puladas/pausas também em gastos comuns.
+- [x] T7.19 Previstos do mês em Lançamentos; próxima data e "todo dia X" em Gastos recorrentes (R14.29, R14.30)
+  Notas: painel "Previstos neste mês" (parcelas, assinaturas, recorrentes) a partir de `month-items`; "Próxima" calculada (conta da casa: primeiro vencimento a partir deste mês); "Todo dia X" = a cada 1 mês ancorado no dia X. Testes `r14_29_*`, `r14_30_*`. Achados da 3ª revisão corrigidos: o dia fica guardado (`day_of_month`), compra real em outro dia reancora no dia X mais próximo; "Próxima" pula datas puladas e pausas em todos os tipos; reajustes futuros intermediários contados ("e mais N"). Testes `test_r14_30_*`.
+- [x] T7.20 Avisos: fatura apagada não deixa "Fatura faltando"; "sem categoria" diz onde estão os itens (R14.31)
+  Notas: um mês passado só fica faltando se o cartão já tinha fatura importada antes dele ou se há lançamento manual nele; aviso de sem categoria com link por tipo de item. Testes `test_r8_9_*` (sync), `r14_31_*`.
+- [x] T7.21 Benefício: escolher qual benefício (VR, Home office…) ao pagar com um cartão de benefício, mostrado em Lançamentos (R14.32)
+  Notas: seletor "Qual benefício" em lançamento rápido, edição, Assinaturas, Gastos recorrentes e pagamento de Contas da casa; com um benefício já vem escolhido; sem nenhum, a tela explica como ligar; `benefit_id` validado (benefício "cai no cartão" daquele cartão) e em uso não pode ser apagado; trocar cartão/meio limpa. Rótulo "Cartão de benefícios". Testes `test_r14_32_*`, `r14_32_*`.
+- [x] T7.22 Resumo: destacar o mês atual no Resumo anual; tirar "Cartões e contas"; renomear "Renda comprometida" e mostrar todas as pessoas (R14.33)
+  Notas: "Gasto por pessoa" usa `projection.people` (todas as pessoas; com filtro de pessoa, só as filtradas — a confirmar com o operador); "Cartões e contas" saiu (o banner cobre fatura faltando); mês atual com `aria-current` e cor leve. Testes `test_r14_33_*`, `r14_33_*`.
+- [x] T7.23 Gastos recorrentes: coluna Categoria na lista (R14.34)
+  Notas: coluna também em Lançamentos → Recorrentes, com "todo dia X". Testes `r14_34_*`.
+- [x] T7.25 Resumo anual em duas tabelas (categoria e cartão/conta com benefícios), totais sem e com benefício; validar o grid do Resumo em 1440/1024/768 (R14.36)
+  Notas: rodapé mostra só "Total" quando não há gasto em benefício no ano; em tela estreita a tabela abre rolada até o mês atual e o nome da linha fica fixo. Testes `test_r14_36_*`, `r14_36_*`.
+- [x] T7.26 Resumo: "Gasto x renda" compacto; painel Histórico por categoria (uma ou várias, valor e % do total por mês, média), clicável a partir de Gastos por categoria (R14.37)
+  Notas: sem escolha = todas as categorias empilhadas; clicar numa categoria troca a seleção por ela (grupo: monta no seletor); % do mês na lista de Gastos por categoria. Testes `test_r14_37_*`, `r14_37_*`.
+- [x] T7.27 "Padrão" sem divisão gravada resolve pela regra que casa e, sem regra, pelos donos — nunca "ninguém" (R14.16)
+  Notas: resolvido na leitura (`Ledger.default_allocation`), então vale para lançamentos manuais, assinaturas e gastos recorrentes, e para regras criadas depois; divisão explícita vence. Testes `test_r14_16_*`.
+- [x] T7.24 Renomear `.yml` → `.yaml` (Taskfile.yaml, compose.yaml, .github/workflows/ci.yaml) e documentar a convenção em docs/12 (R14.35)
+  Notas: perfis de banco em `.yml` não são mais lidos (erro "renomeie para .yaml" em Status). Testes `test_r14_35_*`.

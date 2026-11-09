@@ -499,6 +499,29 @@ describe("TransactionsPage — recurring", () => {
     ).toBe("2026-01-15");
   });
 
+  it("r14_34 the list shows the category and 'todo dia X'", async () => {
+    mockApi(
+      routes([
+        rec({}),
+        rec({
+          id: "rec2",
+          description: "Academia",
+          category_id: null,
+          every: { value: 1, unit: "months" },
+          day_of_month: 10,
+        }),
+      ]),
+    );
+    renderPage(<TransactionsPage />, "/lancamentos?tab=recorrentes");
+    const racao = (await screen.findByText("Ração")).closest(
+      "tr",
+    ) as HTMLElement;
+    expect(await within(racao).findByText("Casa")).toBeInTheDocument();
+    const gym = screen.getByText("Academia").closest("tr") as HTMLElement;
+    expect(within(gym).getByText("todo dia 10")).toBeInTheDocument();
+    expect(within(gym).getByText("sem categoria")).toBeInTheDocument();
+  });
+
   it("r12_4 postpones, skips and ends a recurring purchase", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { calls } = mockApi(routes([rec({})]));

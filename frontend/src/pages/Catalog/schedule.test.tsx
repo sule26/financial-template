@@ -225,3 +225,51 @@ describe("second review (R14.26, R14.28)", () => {
     );
   });
 });
+
+describe("third review (R14.30)", () => {
+  const base = {
+    last_date: "2026-09-30",
+    every: { value: 1, unit: "months" as const },
+    next_date: null,
+    skipped_dates: [] as string[],
+    pauses: [],
+    group: "purchase" as const,
+  };
+  const rec = (extra: object) =>
+    ({ ...base, ...extra }) as unknown as RecurringPurchase;
+
+  it("r14_30 'todo dia X' keeps day X after a shorter month", () => {
+    expect(nextDate(rec({ day_of_month: 31 }))).toBe("2026-10-31");
+    expect(nextDate(rec({ day_of_month: 31, last_date: "2026-10-31" }))).toBe(
+      "2026-11-30",
+    );
+  });
+
+  it("r14_30 'Próxima' of an ordinary recurring skips skipped dates and paused months", () => {
+    expect(nextDate(rec({ skipped_dates: ["2026-10-30"] }))).toBe("2026-11-30");
+    expect(
+      nextDate(
+        rec({ pauses: [{ from_month: "2026-10", until_month: "2026-11" }] }),
+      ),
+    ).toBe("2026-12-30");
+  });
+
+  it("r14_28 says how many more reajustes are scheduled in between", () => {
+    expect(
+      plain(
+        describePrice(
+          "40.00",
+          [
+            { from_month: "2027-01", amount: "45.00" },
+            { from_month: "2027-04", amount: "50.00" },
+            { from_month: "2027-07", amount: "55.00" },
+            { from_month: "2027-10", amount: "60.00" },
+          ],
+          "2026-10",
+        ),
+      ),
+    ).toBe(
+      "R$ 60,00 a partir de out/2027 (hoje R$ 40,00; R$ 45,00 em jan/2027 e mais 2 reajustes)",
+    );
+  });
+});

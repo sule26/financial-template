@@ -22,7 +22,7 @@ exposição à rede**.
 | Build | `.dockerignore` impede que `faturas/`, `inbox/`, `data/`, `secrets/` e PDFs/CSVs cheguem ao daemon Docker |
 | Logs | Sem descrição/valor de lançamentos: access log do uvicorn desligado (as query strings têm valores) e falhas de job registram só o tipo do erro |
 | Dados para terceiros | Nenhum. App offline; nenhuma dependência faz chamada de rede em runtime |
-| Supply chain | Dependências pinadas; `pip-audit` e `npm audit` (nível high) no `task ci`. Imagens base pinadas por tag **e digest** (`Dockerfile`, `backend/Dockerfile.dev`, `Taskfile.yml`, `docker-compose.yml`; ao atualizar, troque os quatro) |
+| Supply chain | Dependências pinadas; `pip-audit` e `npm audit` (nível high) no `task ci`. Imagens base pinadas por tag **e digest** (`Dockerfile`, `backend/Dockerfile.dev`, `Taskfile.yaml`, `compose.yaml`; ao atualizar, troque os quatro) |
 
 ## Checklist ao mexer em algo sensível
 

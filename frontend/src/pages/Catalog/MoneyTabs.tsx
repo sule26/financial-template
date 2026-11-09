@@ -54,7 +54,7 @@ import {
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   checking: "Conta corrente",
-  benefit: "Benefício (VR/VA)",
+  benefit: "Cartão de benefícios",
   cash: "Dinheiro (carteira)",
 };
 
@@ -83,7 +83,7 @@ function AccountForm({ draft, set }: FormProps<AccountDraft>) {
     <>
       <FormSection
         title="Identificação"
-        hint="Conta corrente (extrato, débito, PIX), cartão de benefício (VR/VA) ou dinheiro na carteira."
+        hint="Conta corrente (extrato, débito, PIX), cartão de benefícios (Caju, Flash, Alelo…) ou dinheiro na carteira."
       >
         <TextInput
           label="Nome"
@@ -101,7 +101,7 @@ function AccountForm({ draft, set }: FormProps<AccountDraft>) {
           value={draft.type}
           description={
             isBenefit
-              ? "cartão de benefício (VR/VA): o valor mensal vem da aba Benefícios; não tem fechamento nem vencimento, só dia de renovação"
+              ? "cartão de benefícios: cada benefício dele (VR, VA, Home office…) é cadastrado na aba Benefícios; não tem fechamento nem vencimento, só dia de renovação"
               : undefined
           }
           onChange={(e) => set({ type: e.currentTarget.value as AccountType })}
@@ -194,7 +194,7 @@ export function AccountsTab() {
           cell: (a: Account) =>
             a.type === "benefit" ? (
               <>
-                <span>cartão de benefício (VR/VA)</span>
+                <span>cartão de benefícios</span>
                 {a.renewal_day != null && (
                   <>
                     {" "}
@@ -551,7 +551,7 @@ export function CardsTab() {
       rowName={(c) => c.name}
       intro={
         <Alert color="blue" variant="light">
-          Cartão de benefício (VR/VA)? Cadastre em{" "}
+          Cartão de benefícios? Cadastre em{" "}
           <Anchor component={Link} to="?tab=contas">
             Contas
           </Anchor>{" "}

@@ -43,15 +43,24 @@ def test_missing_directory_gives_empty_set(tmp_path: Path) -> None:
     assert loaded.profiles == {} and loaded.plugins == {} and loaded.errors == {}
 
 
-def test_r4_1_loads_yaml_and_yml_and_records_sources(settings) -> None:
+def test_r4_1_loads_yaml_and_records_sources(settings) -> None:
     d = settings.profiles_dir
     (d / "extrato.yaml").write_text(STATEMENT_PROFILE, encoding="utf-8")
-    (d / "aberta.yml").write_text(OPEN_INVOICE_CSV_PROFILE, encoding="utf-8")
+    (d / "aberta.yaml").write_text(OPEN_INVOICE_CSV_PROFILE, encoding="utf-8")
     loaded = load_profiles(d)
     assert set(loaded.profiles) == {"banco-teste-extrato", "banco-y-fatura-aberta-csv"}
     assert loaded.sources["banco-teste-extrato"] == "extrato.yaml"
-    assert loaded.sources["banco-y-fatura-aberta-csv"] == "aberta.yml"
+    assert loaded.sources["banco-y-fatura-aberta-csv"] == "aberta.yaml"
     assert loaded.errors == {}
+
+
+def test_r14_35_yml_profiles_are_reported_not_loaded(settings) -> None:
+    d = settings.profiles_dir
+    (d / "aberta.yml").write_text(OPEN_INVOICE_CSV_PROFILE, encoding="utf-8")
+    loaded = load_profiles(d)
+    assert loaded.profiles == {}
+    msg = "extensão .yml não é mais lida: renomeie para aberta.yaml"
+    assert loaded.errors == {"aberta.yml": msg}
 
 
 def test_invalid_profiles_are_collected_not_raised(settings) -> None:

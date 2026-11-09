@@ -56,3 +56,9 @@ dono = `owner`, revisão = `review`/`staging`, perfil de banco = `bank profile`.
 
 `.kiro/` **é versionado** (steering do projeto, ex.: `.kiro/steering/autonomy.md`): não colocar nele
 dados pessoais, segredos nem caminhos absolutos da máquina.
+
+## Arquivos YAML
+
+Sempre `.yaml`, nunca `.yml` (Taskfile, compose, workflows, perfis de banco). A extensão `.yml` só
+se alguma ferramenta exigir. Perfis de banco em `.yml` não são mais lidos: aparecem na tela Status como
+erro "renomeie para `<nome>.yaml`".

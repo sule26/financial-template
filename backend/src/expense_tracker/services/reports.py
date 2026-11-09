@@ -98,6 +98,7 @@ def build_state(repo: Repository) -> LedgerState:
         subscriptions=repo.all("subscriptions"),
         recurring=repo.all("recurring_purchases"),
         documents=[doc_info(e) for e in repo.all("import_manifest")],
+        rules=repo.all("rules"),
         benefits=repo.all("benefits"),
     )
 
@@ -164,6 +165,7 @@ class Reports:
                     "benefit_income": _m(s.benefit_income),
                     "by_card": _dict(s.by_card),
                     "by_method": _dict(s.by_method),
+                    "by_category": _dict(s.by_category),  # R14.37: category history
                     "states": s.states,
                 }
             )
@@ -174,9 +176,13 @@ class Reports:
         year = month[:4]
         annual_views = ledger.months([f"{year}-{m:02d}" for m in range(1, 13)])
         annual: dict[str, dict[str, str]] = {}
+        annual_by_card: dict[str, dict[str, str]] = {}  # R14.36
+        annual_benefit: dict[str, str] = {}  # R14.36: spent on benefit cards (VR/VA…)
         for view in annual_views:
             s = summarize(ledger, view, user, method)
             annual[view.month] = _dict(s.by_category)
+            annual_by_card[view.month] = _dict(s.by_card)
+            annual_benefit[view.month] = money_str(s.by_method.get("benefit", ZERO))
         goals = goals_progress(
             self.repo.all("savings_goals"),
             contributions_by_goal(self.repo.all("investments"), month),
@@ -191,6 +197,8 @@ class Reports:
             "states": current.states,
             "series": series,
             "annual": annual,
+            "annual_by_card": annual_by_card,
+            "annual_benefit": annual_benefit,
             "goals": {
                 g: {"target": money_str(t), "achieved": money_str(a)} for g, (t, a) in goals.items()
             },
@@ -270,13 +278,16 @@ class Reports:
                 }
             )
         commitments = []
+        people = []  # R14.33: everyone (with or without income), for "Gasto por pessoa"
         for u in self.repo.all("users"):
             if user_id and u.id not in {x.strip() for x in user_id.split(",")}:
                 continue
             rows = committed_income(ledger, ledger.months(months), u)
+            entry = {"user_id": u.id, "months": [_commit(r) for r in rows]}
+            people.append(entry)
             if any(r.income is not None or r.benefit_income is not None for r in rows):
-                commitments.append({"user_id": u.id, "months": [_commit(r) for r in rows]})
-        return {"months": out, "committed_income": commitments}
+                commitments.append(entry)
+        return {"months": out, "committed_income": commitments, "people": people}
 
     def month_items(
         self,
@@ -553,6 +564,7 @@ class Reports:
                     "payment_method": item.payment_method.value,
                     "card_id": item.card_id,
                     "account_id": item.account_id,
+                    "benefit_id": getattr(item, "benefit_id", None),  # R14.32
                     # R14.27: the split in force in that month
                     "allocations": item.model_copy(
                         update={"allocations": item.allocations_in(month)}
@@ -650,11 +662,16 @@ class Reports:
             if card.parent_card_id:
                 continue
             h = ledger.card_h(card.id)
+            # R8.9: a past month is "faltando" only when the card is in use by then — an invoice
+            # already imported for an earlier month, or a real (manual) entry in that month.
+            # Forecasts alone or entries of other months do not count (e.g. after deleting the
+            # only invoice of the card, no month is reported missing).
+            first = ledger.first_document_month(card.id)
             for back in range(1, 4):
                 m = add_months(h, -back)
                 state, items = ledger.card_month(card.id, m)
-                has_activity = any(i.origin != "subscription" for i in items) or any(
-                    t.card_id == card.id for t in self.repo.all("transactions")
+                has_activity = (first is not None and first < m) or any(
+                    i.origin == "transaction" for i in items
                 )
                 if state == "missing" and has_activity:
                     out.append({"type": "missing_invoice", "card_id": card.id, "month": m})

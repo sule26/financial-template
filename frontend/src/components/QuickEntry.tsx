@@ -31,6 +31,7 @@ import type {
 import { METHOD_LABELS, parseMoneyInput } from "../lib/format";
 import { useDefaultSplit } from "./defaultSplit";
 import { AllocationPicker, allocationValid } from "./AllocationPicker";
+import { BenefitPicker } from "./BenefitPicker";
 import { CategorySelect } from "./CategorySelect";
 import { errorText } from "./QueryState";
 import { formatMonth, useMonth } from "../hooks/month";
@@ -130,6 +131,9 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
   const [allocationTouched, setAllocationTouched] = useState(false);
   const [installments, setInstallments] = useState<number>(1);
   const [note, setNote] = useState("");
+  const [benefitId, setBenefitId] = useState<string | null>(null); // R14.32
+  // another card or method: the benefit chosen for the previous one no longer applies
+  useEffect(() => setBenefitId(null), [ownerId, method]);
   const [errors, setErrors] = useState<FormErrors>({});
 
   const isCredit = method === "credit";
@@ -210,6 +214,7 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
       payment_method: method,
     };
     body[isCredit ? "card_id" : "account_id"] = ownerId;
+    if (method === "benefit" && benefitId) body.benefit_id = benefitId;
     // "Padrão" (untouched or explicit null) = let the backend precedence decide.
     if (allocationTouched && allocations !== null)
       body.allocations = allocations;
@@ -294,7 +299,7 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
               isCredit
                 ? "Cartão"
                 : method === "benefit"
-                  ? "Cartão de benefício"
+                  ? "Cartão de benefícios"
                   : "Conta"
             }
             data={ownerOptions}
@@ -305,6 +310,14 @@ export function QuickEntryForm({ onDone }: { onDone: () => void }) {
             required
           />
         </SimpleGrid>
+        {method === "benefit" && (
+          <BenefitPicker
+            key={ownerId ?? ""}
+            accountId={ownerId}
+            value={benefitId}
+            onChange={setBenefitId}
+          />
+        )}
         <CategorySelect
           value={categoryId}
           onChange={(v) => {

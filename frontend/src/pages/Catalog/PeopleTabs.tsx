@@ -350,7 +350,7 @@ function UserForm({ draft, set }: FormProps<UserDraft>) {
         onChange={(oneOff) => set({ oneOff })}
       />
       <Text size="xs" c="dimmed">
-        VR/VA e auxílios (ex.: home office) ficam na aba Benefícios.
+        Benefícios (VR, VA, Home office…) ficam na aba Benefícios.
       </Text>
     </>
   );

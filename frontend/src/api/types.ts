@@ -147,6 +147,8 @@ export interface ReviewInfo {
 }
 export interface Transaction {
   id: string;
+  /** R14.32: which benefit of a benefit card paid it. */
+  benefit_id?: string | null;
   fingerprint: string | null;
   kind: Kind;
   source: {
@@ -218,6 +220,8 @@ export interface Subscription {
     from_month: MonthStr;
     allocations: Allocation | null;
   }[];
+  /** R14.32: which benefit of the benefit card pays it. */
+  benefit_id?: string | null;
   /** R14.26: "household" = conta da casa (luz, água, aluguel…). */
   group?: "subscription" | "household";
   due_day?: number | null;
@@ -248,6 +252,10 @@ export interface RecurringPurchase {
   }[];
   /** R14.26: "household" = conta da casa (occurrence date = due date). */
   group?: "purchase" | "household";
+  /** R14.32: which benefit of the benefit card pays it. */
+  benefit_id?: string | null;
+  /** R14.30: "todo dia X do mês" (monthly interval only). */
+  day_of_month?: number | null;
 }
 export interface Rule {
   id: string;
@@ -374,6 +382,10 @@ export interface Summary {
   states: Record<string, string>;
   series: MonthSeries[];
   annual: Record<MonthStr, Record<string, Money>>;
+  /** R14.36: per month, spending per card/account (benefit cards included). */
+  annual_by_card?: Record<MonthStr, Record<string, Money>>;
+  /** R14.36: per month, how much of it was paid with benefit. */
+  annual_benefit?: Record<MonthStr, Money>;
   goals: Record<string, { target: Money; achieved: Money }>;
 }
 export interface Commitment {
@@ -389,6 +401,8 @@ export interface Commitment {
 export interface Projection {
   months: MonthSeries[];
   committed_income: { user_id: string; months: Commitment[] }[];
+  /** R14.33: every person (income may be null), for "Gasto por pessoa". */
+  people?: { user_id: string; months: Commitment[] }[];
 }
 export interface Balances {
   user_id: string;

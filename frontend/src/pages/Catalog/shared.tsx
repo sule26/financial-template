@@ -25,6 +25,7 @@ import {
   type Allocation,
   type PaymentMethod,
 } from "../../api/types";
+import { BenefitPicker } from "../../components/BenefitPicker";
 import { ErrorMessage, QueryState } from "../../components/QueryState";
 import { formatPct, METHOD_LABELS, parseMoneyInput } from "../../lib/format";
 
@@ -389,6 +390,8 @@ export interface PaymentDraft {
   payment_method: PaymentMethod;
   card_id: string | null;
   account_id: string | null;
+  /** R14.32: which benefit of the benefit card (only drafts that manage it have the key). */
+  benefit_id?: string | null;
 }
 
 /** Payment method + the card (credit) or account (other methods) it goes through. */
@@ -403,41 +406,54 @@ export function PaymentTarget({
   const accounts = useList("accounts").data ?? [];
   const credit = value.payment_method === "credit";
   const accType = ACCOUNT_TYPE_FOR[value.payment_method];
+  const managesBenefit = "benefit_id" in value;
+  // a new method or account: the benefit chosen for the previous one no longer applies
+  const reset = managesBenefit ? { benefit_id: null } : {};
   return (
-    <Group grow align="flex-end">
-      <NativeSelect
-        label="Meio de pagamento"
-        data={PAYMENT_METHODS.map((m) => ({
-          value: m,
-          label: METHOD_LABELS[m] ?? m,
-        }))}
-        value={value.payment_method}
-        onChange={(e) =>
-          onChange({
-            payment_method: e.currentTarget.value as PaymentMethod,
-            card_id: null,
-            account_id: null,
-          })
-        }
-      />
-      {credit ? (
-        <IdSelect
-          label="Cartão"
-          value={value.card_id}
-          onChange={(v) => onChange({ card_id: v })}
-          options={cards}
-          required
+    <Stack gap="xs">
+      <Group grow align="flex-end">
+        <NativeSelect
+          label="Meio de pagamento"
+          data={PAYMENT_METHODS.map((m) => ({
+            value: m,
+            label: METHOD_LABELS[m] ?? m,
+          }))}
+          value={value.payment_method}
+          onChange={(e) =>
+            onChange({
+              payment_method: e.currentTarget.value as PaymentMethod,
+              card_id: null,
+              account_id: null,
+              ...reset,
+            })
+          }
         />
-      ) : (
-        <IdSelect
-          label="Conta"
-          value={value.account_id}
-          onChange={(v) => onChange({ account_id: v })}
-          options={accounts.filter((a) => a.type === accType)}
-          required
+        {credit ? (
+          <IdSelect
+            label="Cartão"
+            value={value.card_id}
+            onChange={(v) => onChange({ card_id: v })}
+            options={cards}
+            required
+          />
+        ) : (
+          <IdSelect
+            label="Conta"
+            value={value.account_id}
+            onChange={(v) => onChange({ account_id: v, ...reset })}
+            options={accounts.filter((a) => a.type === accType)}
+            required
+          />
+        )}
+      </Group>
+      {managesBenefit && value.payment_method === "benefit" && (
+        <BenefitPicker
+          accountId={value.account_id}
+          value={value.benefit_id ?? null}
+          onChange={(benefit_id) => onChange({ benefit_id })}
         />
       )}
-    </Group>
+    </Stack>
   );
 }
 
@@ -449,13 +465,22 @@ export function checkPayment(p: PaymentDraft): string | null {
 }
 
 export function paymentBody(p: PaymentDraft): PaymentDraft {
-  return p.payment_method === "credit"
-    ? { payment_method: p.payment_method, card_id: p.card_id, account_id: null }
-    : {
-        payment_method: p.payment_method,
-        card_id: null,
-        account_id: p.account_id,
-      };
+  const body: PaymentDraft =
+    p.payment_method === "credit"
+      ? {
+          payment_method: p.payment_method,
+          card_id: p.card_id,
+          account_id: null,
+        }
+      : {
+          payment_method: p.payment_method,
+          card_id: null,
+          account_id: p.account_id,
+        };
+  if ("benefit_id" in p)
+    body.benefit_id =
+      p.payment_method === "benefit" ? (p.benefit_id ?? null) : null;
+  return body;
 }
 
 /** Human text for an allocation: "Casal", "Eu 100%", "Eu 60% · Ana 40%" or the fallback. */

@@ -101,7 +101,7 @@ function BenefitForm({ draft, set }: FormProps<BenefitDraft>) {
         />
         <Text size="xs" c="dimmed">
           {isCard
-            ? "VR/VA: o saldo cai num cartão de benefício (conta do tipo Benefício), usado como meio de pagamento “Benefício” no lançamento rápido. Conta como renda em benefício."
+            ? "Cai num cartão de benefícios (ex.: Caju com VR e Home office). Ao lançar uma compra com esse cartão, você escolhe qual benefício usou. Conta como renda em benefício."
             : "Ex.: auxílio home office: cai na conta corrente e soma na renda do mês."}
         </Text>
       </Stack>
@@ -178,8 +178,9 @@ export function BenefitsTab() {
       emptyText="Nenhum benefício cadastrado."
       intro={
         <Text size="sm" c="dimmed">
-          VR/VA ficam num cartão de benefício; auxílios pagos em dinheiro (ex.:
-          home office) caem na conta corrente e somam na renda.
+          Cada benefício (VR, VA, Home office…) cai num cartão de benefícios ou
+          na conta corrente; um cartão pode receber vários, e ao lançar você
+          escolhe qual foi usado.
         </Text>
       }
       rowName={(b) => b.name}

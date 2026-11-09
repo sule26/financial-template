@@ -260,7 +260,7 @@ describe("R13.17 benefit card renewal day", () => {
     const link = await screen.findByRole("link", { name: "Contas" });
     const note = link.closest('[role="alert"]') as HTMLElement;
     expect(note).toHaveTextContent(
-      "Cartão de benefício (VR/VA)? Cadastre em Contas com tipo Benefício — ele não tem fechamento nem vencimento, só dia de renovação.",
+      "Cartão de benefícios? Cadastre em Contas com tipo Benefício — ele não tem fechamento nem vencimento, só dia de renovação.",
     );
     expect(link).toHaveAttribute("href", "/cadastros?tab=contas");
   });

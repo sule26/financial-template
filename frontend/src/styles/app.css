@@ -946,3 +946,40 @@
   padding: 10px 12px;
   background: var(--et-surface-sunken);
 }
+
+/* R14.33: the current month column of the annual table, a light accent tint */
+.et-current-month {
+  background: color-mix(
+    in srgb,
+    var(--mantine-primary-color-filled) 9%,
+    transparent
+  );
+}
+th.et-current-month {
+  color: var(--mantine-primary-color-filled);
+}
+
+/* R14.37: category names in "Gastos por categoria" open their history */
+.et-link-button {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.et-link-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.et-link-button:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+/* R14.36: the row name stays visible while the months scroll sideways */
+.et-annual th:first-child,
+.et-annual td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+  box-shadow: 1px 0 0 var(--mantine-color-default-border);
+}

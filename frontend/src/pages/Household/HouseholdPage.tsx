@@ -19,6 +19,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useGet, useNames } from "../../api/hooks";
 import type { Allocation, PaymentMethod } from "../../api/types";
+import { BenefitPicker, useBenefitNames } from "../../components/BenefitPicker";
 import { errorText, QueryState } from "../../components/QueryState";
 import { DateField } from "../../components/ui/DateField";
 import { MoneyText, PageHeader, Panel, StatusBadge } from "../../components/ui";
@@ -39,6 +40,7 @@ export interface HouseholdBill {
   payment_method: PaymentMethod;
   card_id: string | null;
   account_id: string | null;
+  benefit_id?: string | null; // R14.32
   allocations: Allocation | null;
   due_date: string | null;
   expected: string;
@@ -62,6 +64,7 @@ const STATUS_TONES = {
 export function HouseholdPage() {
   const { selected } = useMonth();
   const names = useNames();
+  const benefitNames = useBenefitNames();
   const path = `/api/reports/household?month=${encodeURIComponent(selected)}`;
   const report = useGet<HouseholdReport>(["reports", "household", path], path);
   const [paying, setPaying] = useState<HouseholdBill | null>(null);
@@ -154,6 +157,8 @@ export function HouseholdPage() {
                       <Table.Td>
                         {METHOD_LABELS[b.payment_method] ?? b.payment_method} ·{" "}
                         {names.owner(b.card_id ?? b.account_id)}
+                        {b.benefit_id &&
+                          ` · ${benefitNames[b.benefit_id] ?? b.benefit_id}`}
                       </Table.Td>
                       <Table.Td ta="right">{formatMoney(b.expected)}</Table.Td>
                       <Table.Td ta="right">
@@ -213,6 +218,10 @@ export function PayBillForm({
 }) {
   const [amount, setAmount] = useState(bill.expected.replace(".", ","));
   const [date, setDate] = useState(bill.due_date ?? `${month}-01`);
+  // R14.32: which benefit of the card pays it (starts on the bill's)
+  const [benefitId, setBenefitId] = useState<string | null>(
+    bill.benefit_id ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const save = useAction<Record<string, unknown>>(
     "post",
@@ -238,6 +247,8 @@ export function PayBillForm({
     if (bill.card_id) body.card_id = bill.card_id;
     else body.account_id = bill.account_id;
     if (bill.allocations) body.allocations = bill.allocations;
+    if (bill.payment_method === "benefit" && benefitId)
+      body.benefit_id = benefitId;
     save.mutate(body, { onSuccess: onDone });
   };
   return (
@@ -253,6 +264,13 @@ export function PayBillForm({
           onChange={(e) => setAmount(e.currentTarget.value)}
         />
         <DateField label="Data do pagamento" value={date} onChange={setDate} />
+        {bill.payment_method === "benefit" && (
+          <BenefitPicker
+            accountId={bill.account_id}
+            value={benefitId}
+            onChange={setBenefitId}
+          />
+        )}
         {(error || save.error) && (
           <Alert color="red" role="alert">
             {error ?? errorText(save.error)}

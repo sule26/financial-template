@@ -64,6 +64,7 @@ export function RecurringTab() {
                 <Table.Th>Descrição</Table.Th>
                 <Table.Th ta="right">Valor estimado</Table.Th>
                 <Table.Th>A cada</Table.Th>
+                <Table.Th>Categoria</Table.Th>
                 <Table.Th>Última</Table.Th>
                 <Table.Th>Próxima prevista</Table.Th>
                 <Table.Th>Meio</Table.Th>
@@ -85,7 +86,14 @@ export function RecurringTab() {
                       {formatMoney(rec.estimated_amount)}
                     </Table.Td>
                     <Table.Td>
-                      {rec.every.value} {UNIT_LABELS[rec.every.unit]}
+                      {rec.day_of_month
+                        ? `todo dia ${rec.day_of_month}`
+                        : `${rec.every.value} ${UNIT_LABELS[rec.every.unit] ?? rec.every.unit}`}
+                    </Table.Td>
+                    <Table.Td>
+                      {rec.category_id
+                        ? (names.categories[rec.category_id] ?? rec.category_id)
+                        : "sem categoria"}
                     </Table.Td>
                     <Table.Td>{formatDate(rec.last_date)}</Table.Td>
                     <Table.Td>

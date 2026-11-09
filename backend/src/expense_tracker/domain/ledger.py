@@ -18,11 +18,13 @@ from expense_tracker.domain.allocation import (
     AllocationError,
     Ownership,
     ResolvedSplit,
+    RuleInput,
     main_card_id,
     parts,
     resolve_account,
     resolve_allocation,
     resolve_card,
+    rule_allocation,
 )
 from expense_tracker.domain.installments import schedule
 from expense_tracker.domain.models import (
@@ -35,6 +37,7 @@ from expense_tracker.domain.models import (
     Kind,
     PaymentMethod,
     RecurringPurchase,
+    Rule,
     Share,
     SplitProfile,
     Subscription,
@@ -95,6 +98,7 @@ class LedgerState:
     recurring: Sequence[RecurringPurchase] = ()
     documents: Sequence[DocumentInfo] = ()
     benefits: Sequence[Benefit] = ()
+    rules: Sequence[Rule] = ()  # "Padrão" (no allocation) = matching rule, else owners
 
 
 Origin = Literal["transaction", "staging", "plan", "anticipation", "subscription", "recurring"]
@@ -222,6 +226,12 @@ class Ledger:
             if cid == main.id and doc.closing_date is not None
         }
         return invoice_month(main.billing_history, d, actual)
+
+    def first_document_month(self, card_id: str) -> str | None:
+        """Earliest invoice month with an active document of the (main) card, if any."""
+        main = self.main_card(card_id)
+        months = [m for (cid, m) in self._docs_by_card_month if cid == main]
+        return min(months) if months else None
 
     def document_for(self, card_id: str, month: str) -> DocumentInfo | None:
         return self._docs_by_card_month.get((self.main_card(card_id), month))
@@ -544,8 +554,23 @@ class Ledger:
 
     # ------------------------------------------------------------ allocation helpers
 
+    def default_allocation(self, item: LedgerItem) -> Allocation:
+        """What "Padrão" (no allocation) means for an item: the allocation of the first rule
+        that matches it (same order as the Revisão, docs/08), else the owners of the card/account.
+        Resolved when reading, so a manual entry, subscription or recurring expense left on
+        "Padrão" follows the rules like an imported line (operator report: nobody got the part).
+        """
+        rule = rule_allocation(
+            self.s.rules,
+            RuleInput(item.description, item.amount, item.card_id, item.account_id),
+            item.category_id,
+        )
+        if rule is not None and rule.then.allocations is not None:
+            return rule.then.allocations
+        return item.owners
+
     def shares_of(self, item: LedgerItem) -> ResolvedSplit:
-        spec = item.allocations if item.allocations is not None else item.owners
+        spec = item.allocations if item.allocations is not None else self.default_allocation(item)
         try:
             return resolve_allocation(
                 spec, item.month, self.s.splits, self.s.users, self.s.benefits

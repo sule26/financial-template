@@ -403,8 +403,16 @@ class Transaction(Model):
     tag: str | None = None
     review: ReviewInfo | None = None
     created_at: dt.datetime | None = None
+    # R14.32: which benefit (VR, Home office…) of a benefit card paid it
+    benefit_id: str | None = None
 
     _check_alloc = field_validator("allocations")(classmethod(lambda cls, v: check_allocation(v)))
+
+    @model_validator(mode="after")
+    def _benefit_only_on_benefit(self) -> Transaction:
+        if self.benefit_id is not None and self.payment_method is not PaymentMethod.BENEFIT:
+            raise ValueError("benefit_id is only allowed with payment_method 'benefit'")
+        return self
 
     @model_validator(mode="after")
     def _owner(self) -> Transaction:
@@ -557,6 +565,14 @@ class Subscription(Model):
     # R14.26: "household" = conta da casa (luz, água, aluguel…), shown in Contas da casa
     group: Literal["subscription", "household"] = "subscription"
     due_day: int | None = Field(default=None, ge=1, le=31)
+    # R14.32: which benefit of the benefit card pays it (VR, Home office…)
+    benefit_id: str | None = None
+
+    @model_validator(mode="after")
+    def _benefit_only_on_benefit(self) -> Subscription:
+        if self.benefit_id is not None and self.payment_method is not PaymentMethod.BENEFIT:
+            raise ValueError("benefit_id is only allowed with payment_method 'benefit'")
+        return self
 
     _check_prices = field_validator("price_history")(
         classmethod(lambda cls, v: _distinct_prices(v))
@@ -624,6 +640,24 @@ class RecurringPurchase(Model):
     # R14.26: "household" = conta da casa (luz, água, aluguel…): the occurrence date is the due
     # date, paying it does not move the schedule, and it shows in Contas da casa.
     group: Literal["purchase", "household"] = "purchase"
+    # R14.32: which benefit of the benefit card pays it (VR, Home office…)
+    benefit_id: str | None = None
+
+    @model_validator(mode="after")
+    def _benefit_only_on_benefit(self) -> RecurringPurchase:
+        if self.benefit_id is not None and self.payment_method is not PaymentMethod.BENEFIT:
+            raise ValueError("benefit_id is only allowed with payment_method 'benefit'")
+        return self
+
+    # R14.30: "todo dia X do mês" — each occurrence falls on day X (last day in shorter months),
+    # whatever the day of ``last_date``; only with a monthly interval.
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+
+    @model_validator(mode="after")
+    def _day_needs_months(self) -> RecurringPurchase:
+        if self.day_of_month is not None and self.every.unit != "months":
+            raise ValueError("day_of_month needs an interval in months")
+        return self
 
     _check_prices = field_validator("price_history")(
         classmethod(lambda cls, v: _distinct_prices(v))

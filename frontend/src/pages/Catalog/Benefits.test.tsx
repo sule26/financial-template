@@ -202,18 +202,16 @@ describe("Benefits tab", () => {
 });
 
 describe("Accounts tab benefit hint", () => {
-  it("r11_5 labels benefit accounts as benefit cards (VR/VA)", async () => {
+  it("r11_5 labels benefit accounts as benefit cards", async () => {
     mockApi({ ...CATALOG, "GET /api/accounts": ACCOUNTS });
     const user = userEvent.setup();
     renderPage(<CatalogPage />, "/cadastros?tab=contas");
     const row = (await screen.findByText("VR")).closest("tr") as HTMLElement;
-    expect(
-      within(row).getByText("cartão de benefício (VR/VA)"),
-    ).toBeInTheDocument();
+    expect(within(row).getByText("cartão de benefícios")).toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Editar VR" }));
     const modal = await dialog();
     expect(
-      within(modal).getByText(/cartão de benefício \(VR\/VA\): o valor mensal/),
+      within(modal).getByText(/cada benefício dele \(VR, VA, Home office…\)/),
     ).toBeInTheDocument();
   });
 });

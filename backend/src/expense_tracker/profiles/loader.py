@@ -67,11 +67,16 @@ def load_all(directory: Path, examples: Path | None) -> ProfileSet:
 
 
 def load_profiles(directory: Path) -> ProfileSet:
-    """Load ``*.yaml``/``*.yml`` in ``directory`` and ``plugins/*.py``. Errors are collected."""
+    """Load ``*.yaml`` in ``directory`` and ``plugins/*.py``. Errors are collected.
+
+    R14.35: ``.yml`` is no longer read; such a file is reported so it can be renamed.
+    """
     result = ProfileSet()
     if not directory.is_dir():
         return result
-    for path in sorted([*directory.glob("*.yaml"), *directory.glob("*.yml")]):
+    for path in sorted(directory.glob("*.yml")):
+        result.errors[path.name] = f"extensão .yml não é mais lida: renomeie para {path.stem}.yaml"
+    for path in sorted(directory.glob("*.yaml")):
         try:
             profile = parse_profile(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:

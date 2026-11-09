@@ -5,7 +5,7 @@
 ## Pré-requisitos
 
 Docker, docker compose e [Task](https://taskfile.dev) (go-task v3). Nada mais (sem Python/Node na
-máquina). **Não há Makefile**: todos os comandos são tasks do `Taskfile.yml`.
+máquina). **Não há Makefile**: todos os comandos são tasks do `Taskfile.yaml`.
 
 ## Primeira execução
 
@@ -42,7 +42,7 @@ iniciar, a cada 60 s e quando a pasta muda; a tela Status tem "Varrer agora".
 
 | Variável | Padrão | Função |
 |----------|--------|--------|
-| `APP_PORT` | `8080` | Porta publicada em 127.0.0.1 (só no `docker-compose.yml`) |
+| `APP_PORT` | `8080` | Porta publicada em 127.0.0.1 (só no `compose.yaml`) |
 | `DATA_DIR` | `/app/data` | Pasta dos JSON |
 | `INBOX_DIR` | `/app/inbox` | Pasta monitorada |
 | `PROFILES_DIR` | `/app/profiles` | Perfis de banco (editáveis pela tela Perfis) |
@@ -76,5 +76,5 @@ iniciar, a cada 60 s e quando a pasta muda; a tela Status tem "Varrer agora".
 | Total do mês dobrado | Bug de reconciliação | Abrir bug com o cenário; ver [09](09-revisao-e-reconciliacao.md#por-que-não-há-dupla-contagem) |
 | App não sobe: "lock held" | Outra instância rodando | `task down` / parar a outra instância |
 | Porta 8080 ocupada | Outro serviço local | `APP_PORT=8090 task up` |
-| `task up` ok, container "healthy", mas http://127.0.0.1:8080 não carrega | VPN roteando a sub-rede do Docker (ex.: `ip route get <ip do container>` sai pela interface da VPN) | O compose fixa a rede em `192.168.240.0/24`; se ela também colidir, troque o `subnet` em `docker-compose.yml` e rode `task down && task up` |
+| `task up` ok, container "healthy", mas http://127.0.0.1:8080 não carrega | VPN roteando a sub-rede do Docker (ex.: `ip route get <ip do container>` sai pela interface da VPN) | O compose fixa a rede em `192.168.240.0/24`; se ela também colidir, troque o `subnet` em `compose.yaml` e rode `task down && task up` |
 | Aviso "nova versão não pôde ser lida" | O arquivo mudou e a nova versão falhou (senha, timeout) | A versão anterior continua valendo; corrija e "Reprocessar" |

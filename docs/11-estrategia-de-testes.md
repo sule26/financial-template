@@ -173,7 +173,7 @@ Um teste por linha de [13](13-seguranca.md#controles) que seja verificável em c
 caminho com `..` ou symlink para fora de `inbox/` rejeitado; senha de PDF ausente de logs, respostas e
 `data/` (busca pelo valor após uma importação); log INFO sem descrição/valor; timeout de parse.
 Configuração do container (não-root, rootfs read-only, `cap_drop`) verificada por um teste que lê o
-`docker-compose.yml`.
+`compose.yaml`.
 
 ### Frontend
 - Cada tela: renderiza com dados (MSW), estado vazio, estado de erro.

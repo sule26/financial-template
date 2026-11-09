@@ -30,7 +30,7 @@ Enquanto o documento não chega, os previstos contam nos painéis (o mês está 
 | Meio (`payment_method`) | Onde fica | Documento que confirma | Previsto? |
 |-------------------------|-----------|------------------------|:---------:|
 | `credit` | Cartão de crédito (`cards`) | Fatura | sim |
-| `benefit` | Conta do tipo `benefit` (VR, VA) | Extrato do benefício | sim |
+| `benefit` | Conta do tipo `benefit` (cartão de benefícios: Caju, Flash…) | Extrato do benefício | sim |
 | `debit` | Conta `checking` | Extrato da conta | sim |
 | `pix` | Conta `checking` | Extrato da conta | sim |
 | `transfer` / `boleto` | Conta `checking` | Extrato da conta | sim |
@@ -44,6 +44,13 @@ Enquanto o documento não chega, os previstos contam nos painéis (o mês está 
 - Cartão de benefício **não tem fechamento nem vencimento** (não há fatura): tem só o **dia de
   renovação** (`accounts.renewal_day`, opcional, R13.17), o dia do mês em que o crédito do benefício
   cai. Por isso ele é cadastrado em Contas (tipo Benefício), nunca em Cartões.
+- Um cartão de benefícios pode receber **vários benefícios** (ex.: Caju com VR e Home office). Sempre
+  que o meio é cartão de benefícios, o lançamento rápido, a edição (também de linha importada),
+  Assinaturas, Gastos recorrentes e o pagamento em Contas da casa mostram **Qual benefício**
+  (`benefit_id`, R14.32). Com um benefício só ele já vem escolhido; sem nenhum ligado ao cartão, a tela
+  explica como ligar (Cadastros → Benefícios, "cai no cartão"). As tabelas mostram o benefício na coluna
+  de pagamento ("Cartão de benefícios · Home office"). Trocar de meio ou de cartão limpa o benefício; um
+  benefício em uso não pode ser apagado; uma escolha antiga de benefício desativado é mantida.
 - O crédito do empregador no benefício entra como `kind = income` com `income_type = benefit`
   (renda em benefício), separado da renda em dinheiro em gasto x renda e na renda comprometida
   (que mostra os dois separadamente).
@@ -136,7 +143,8 @@ Na tela o nome é **Gastos recorrentes** (nem tudo é compra). **Repetir** (R14.
 tantos" (N dias/semanas/meses a partir da última data) ou "todo dia X do mês" (gravado como a cada 1 mês
 com a data no dia X; num mês sem dia X vale o último dia, e a âncora vai para o último mês que tem o dia X,
 ex.: 31 → 31/08, 30/09, 31/10). A coluna **Próxima** mostra
-a próxima data prevista (a adiada, se houver). Os previstos do mês aparecem também em **Lançamentos →
+a próxima data prevista (a adiada, se houver). Gastos cadastrados antes desta opção com "a cada 1 mês" abrem
+como "de tantos em tantos"; para fixar o dia, edite e escolha "todo dia X do mês". Os previstos do mês aparecem também em **Lançamentos →
 Previstos neste mês** (R14.29), junto com parcelas e assinaturas, até virarem lançamento.
 
 Diferente de **assinatura** (valor fixo, todo mês ou todo ano, [07](07-regras-de-negocio.md#assinaturas)),

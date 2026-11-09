@@ -193,6 +193,22 @@ class Catalog:
         self._need("accounts", getattr(item, "account_id", None), "account_id")
         self._need("categories", getattr(item, "category_id", None), "category_id")
         self.check_allocation(getattr(item, "allocations", None))
+        self.check_benefit(item)
+
+    def check_benefit(self, item: Any) -> None:
+        """R14.32: ``benefit_id`` must be a benefit credited on that benefit card."""
+        benefit_id = getattr(item, "benefit_id", None)
+        if benefit_id is None:
+            return
+        benefit = self.repo.get("benefits", benefit_id)
+        if (
+            benefit is None
+            or benefit.destination != "card"
+            or benefit.account_id != getattr(item, "account_id", None)
+        ):
+            raise Invalid(
+                "invalid_benefit", "benefit_id must be a benefit credited on this benefit card"
+            )
 
     def _check_subscriptions(self, item: Subscription) -> None:
         self._owner_refs(item)
@@ -355,10 +371,10 @@ class Catalog:
             {"account_id": "accounts", "parent_card_id": "cards", "responsible_user_id": "users"},
         )
         scan("accounts", self.repo.all("accounts"), {"responsible_user_id": "users"})
-        tx_fields = {"card_id": "cards", "account_id": "accounts"}
+        tx_fields = {"card_id": "cards", "account_id": "accounts", "benefit_id": "benefits"}
         scan("transactions", self.repo.all("transactions"), tx_fields)
         scan("staging", self.repo.all("staging"), tx_fields)
-        owner_fields = {"card_id": "cards", "account_id": "accounts"}
+        owner_fields = {"card_id": "cards", "account_id": "accounts", "benefit_id": "benefits"}
         scan("subscriptions", self.repo.all("subscriptions"), owner_fields)
         scan("recurring_purchases", self.repo.all("recurring_purchases"), owner_fields)
         scan("installment_plans", self.repo.all("installment_plans"), {"card_id": "cards"})

@@ -26,6 +26,7 @@ import {
   AllocationPicker,
   allocationValid,
 } from "../../components/AllocationPicker";
+import { useBenefitNames } from "../../components/BenefitPicker";
 import { CategorySelect } from "../../components/CategorySelect";
 import { useDefaultSplit } from "../../components/defaultSplit";
 import { StatusBadge } from "../../components/ui";
@@ -38,7 +39,6 @@ import {
   describePrice,
   describeSplit,
   nextDate,
-  withDay,
   toAllocationDrafts,
   toAllocationHistory,
   type AllocationDraft,
@@ -460,6 +460,7 @@ function SubscriptionForm({ draft, set }: FormProps<SubscriptionDraft>) {
 
 export function SubscriptionsTab() {
   const names = useNames();
+  const benefitNames = useBenefitNames();
   const { current } = useMonth();
   return (
     <CrudTab<"subscriptions", SubscriptionDraft>
@@ -497,7 +498,7 @@ export function SubscriptionsTab() {
         {
           header: "Pagamento",
           cell: (s: Subscription) =>
-            `${METHOD_LABELS[s.payment_method] ?? s.payment_method} · ${names.owner(s.card_id ?? s.account_id)}`,
+            `${METHOD_LABELS[s.payment_method] ?? s.payment_method} · ${names.owner(s.card_id ?? s.account_id)}${s.benefit_id ? ` · ${benefitNames[s.benefit_id] ?? s.benefit_id}` : ""}`,
         },
         {
           header: "Vigência",
@@ -532,6 +533,7 @@ export function SubscriptionsTab() {
         payment_method: "credit",
         card_id: null,
         account_id: null,
+        benefit_id: null,
         start_month: "",
         end_month: "",
         category_id: null,
@@ -550,6 +552,7 @@ export function SubscriptionsTab() {
         payment_method: s.payment_method,
         card_id: s.card_id,
         account_id: s.account_id,
+        benefit_id: s.benefit_id ?? null,
         start_month: s.start_month,
         end_month: s.end_month ?? "",
         category_id: s.category_id,
@@ -730,7 +733,7 @@ function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
             ? "Um vencimento da conta (ex.: 10/09). Os próximos vencem a cada intervalo a partir dele, pagos ou não."
             : "A última vez que a compra aconteceu de verdade (e já está lançada ou numa fatura). A próxima prevista é esta data + o intervalo; se esta é a deste mês e ainda não foi lançada, use a data da compra anterior." +
               (draft.repeat === "day"
-                ? " Em “Todo dia X do mês”, vale o mês desta data, no dia escolhido."
+                ? " Em “Todo dia X do mês”, as próximas caem sempre no dia escolhido."
                 : "")
         }
         required
@@ -773,6 +776,7 @@ function RecurringForm({ draft, set }: FormProps<RecurringDraft>) {
 
 export function RecurringTab() {
   const names = useNames();
+  const benefitNames = useBenefitNames();
   const { current } = useMonth();
   return (
     <CrudTab<"recurring-purchases", RecurringDraft>
@@ -803,7 +807,9 @@ export function RecurringTab() {
         {
           header: "Intervalo",
           cell: (r: RecurringPurchase) =>
-            `a cada ${r.every.value} ${UNIT_LABELS[r.every.unit] ?? r.every.unit}`,
+            r.day_of_month
+              ? `todo dia ${r.day_of_month}`
+              : `a cada ${r.every.value} ${UNIT_LABELS[r.every.unit] ?? r.every.unit}`,
         },
         {
           header: "Última",
@@ -820,7 +826,14 @@ export function RecurringTab() {
         {
           header: "Pagamento",
           cell: (r: RecurringPurchase) =>
-            `${METHOD_LABELS[r.payment_method] ?? r.payment_method} · ${names.owner(r.card_id ?? r.account_id)}`,
+            `${METHOD_LABELS[r.payment_method] ?? r.payment_method} · ${names.owner(r.card_id ?? r.account_id)}${r.benefit_id ? ` · ${benefitNames[r.benefit_id] ?? r.benefit_id}` : ""}`,
+        },
+        {
+          header: "Categoria",
+          cell: (r: RecurringPurchase) =>
+            r.category_id
+              ? (names.categories[r.category_id] ?? r.category_id)
+              : "sem categoria",
         },
         {
           header: "Divisão",
@@ -847,6 +860,7 @@ export function RecurringTab() {
         payment_method: "credit",
         card_id: null,
         account_id: null,
+        benefit_id: null,
         category_id: null,
         allocations: null,
         active: true,
@@ -861,13 +875,13 @@ export function RecurringTab() {
         estimated_amount: moneyToInput(r.estimated_amount),
         every_value: r.every.value,
         every_unit: r.every.unit,
-        repeat:
-          r.every.unit === "months" && r.every.value === 1 ? "day" : "interval",
-        day: Number(r.last_date.slice(8, 10)),
+        repeat: r.day_of_month ? "day" : "interval",
+        day: r.day_of_month ?? null,
         last_date: r.last_date,
         payment_method: r.payment_method,
         card_id: r.card_id,
         account_id: r.account_id,
+        benefit_id: r.benefit_id ?? null,
         category_id: r.category_id,
         allocations: r.allocations,
         active: r.active,
@@ -881,15 +895,13 @@ export function RecurringTab() {
         description: d.description.trim(),
         match_description: orNull(d.match_description),
         estimated_amount: parseMoneyInput(d.estimated_amount) ?? "",
-        // R14.30: "todo dia X" = every month, anchored on day X of the given date's month
+        // R14.30: "todo dia X" = every month on day X (stored, so real dates never move it)
         every:
           d.repeat === "day"
             ? { value: 1, unit: "months" as const }
             : { value: d.every_value ?? 1, unit: d.every_unit },
-        last_date:
-          d.repeat === "day" && d.day
-            ? withDay(d.last_date.trim(), d.day)
-            : d.last_date.trim(),
+        last_date: d.last_date.trim(),
+        day_of_month: d.repeat === "day" ? d.day : null,
         ...paymentBody(d),
         category_id: d.category_id,
         allocations: d.allocations,

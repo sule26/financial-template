@@ -187,7 +187,7 @@ modificar nem redistribuir seu código.
 ## Layout do repositório
 
 ```
-AGENTS.md  CLAUDE.md  README.md  docker-compose.yml  Dockerfile  Taskfile.yml
+AGENTS.md  CLAUDE.md  README.md  compose.yaml  Dockerfile  Taskfile.yaml
 backend/   pyproject.toml  src/expense_tracker/{api,domain,storage,importing,profiles,sync,review}/  tests/
 frontend/  package.json  src/{pages,components,api,hooks}/  tests/
 profiles/examples/*.yaml

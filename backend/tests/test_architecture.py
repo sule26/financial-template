@@ -72,3 +72,19 @@ def test_domain_has_no_io() -> None:
 def test_all_packages_exist() -> None:
     for package in FORBIDDEN:
         assert (SRC / package / "__init__.py").is_file(), package
+
+
+# R14.35: configuration files use ".yaml", never ".yml" (docs/12 "Arquivos YAML")
+REPO = Path(__file__).resolve().parents[2]
+_SKIP_DIRS = {".git", "node_modules", "data", "inbox", "secrets", "faturas", ".hypothesis"}
+
+
+def test_r14_35_no_yml_files_in_the_repo() -> None:
+    found = [
+        str(p.relative_to(REPO))
+        for p in REPO.rglob("*.yml")
+        if not _SKIP_DIRS & set(p.relative_to(REPO).parts)
+    ]
+    assert found == [], f"rename to .yaml: {found}"
+    assert (REPO / "Taskfile.yaml").is_file()
+    assert (REPO / "compose.yaml").is_file()

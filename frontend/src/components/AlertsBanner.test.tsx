@@ -8,7 +8,11 @@ describe("AlertsBanner", () => {
     mockApi({
       ...CATALOG,
       "GET /api/alerts": [
-        { type: "uncategorized", count: 3, items: {} },
+        {
+          type: "uncategorized",
+          count: 3,
+          items: { transactions: ["t1", "t2"], installment_plans: ["p1"] },
+        },
         {
           type: "recurring_overdue",
           description: "RACAO",
@@ -33,6 +37,38 @@ describe("AlertsBanner", () => {
     expect(
       screen.getByText("2 arquivo(s) precisam de atenção"),
     ).toBeInTheDocument();
+  });
+
+  it("r14_31 says where the uncategorized items are, with a link to each place", async () => {
+    mockApi({
+      ...CATALOG,
+      "GET /api/alerts": [
+        {
+          type: "uncategorized",
+          count: 4,
+          items: {
+            transactions: ["t1"],
+            installment_plans: ["p1", "p2"],
+            recurring_purchases: ["r1"],
+          },
+        },
+      ],
+    });
+    renderPage(<AlertsBanner />);
+    expect(
+      await screen.findByText("4 itens sem categoria"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Uma categoria foi removida/)).toBeNull();
+    expect(screen.getByRole("link", { name: "1 lançamento" })).toHaveAttribute(
+      "href",
+      "/lancamentos?uncategorized=1",
+    );
+    expect(
+      screen.getByRole("link", { name: "2 parcelamentos" }),
+    ).toHaveAttribute("href", "/lancamentos?tab=parcelamentos");
+    expect(
+      screen.getByRole("link", { name: "1 gasto recorrente" }),
+    ).toHaveAttribute("href", "/cadastros?tab=recorrentes");
   });
 
   it("renders nothing without alerts", async () => {

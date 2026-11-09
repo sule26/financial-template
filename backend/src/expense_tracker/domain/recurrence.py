@@ -11,6 +11,7 @@ from expense_tracker.domain.models import Pause, RecurringPurchase, Subscription
 from expense_tracker.domain.months import (
     add_interval,
     add_months,
+    clamp_day,
     month_diff,
     month_of,
     month_range,
@@ -62,6 +63,8 @@ def occurrences(rec: RecurringPurchase, until: date) -> list[date]:
         k = 0
     for _ in range(2000):
         current = add_interval(anchor, k * rec.every.value, rec.every.unit)
+        if k > 0:  # a postponed date (k = 0) is kept as informed, only the next ones go to day X
+            current = _on_day(rec, current)
         k += 1
         if current > until:
             break
@@ -113,9 +116,25 @@ def overdue(rec: RecurringPurchase, today: date, paid: Collection[str] = ()) -> 
     return None
 
 
+def _on_day(rec: RecurringPurchase, d: date) -> date:
+    """R14.30: with ``day_of_month``, the date moves to that day of its month."""
+    if rec.day_of_month is None:
+        return d
+    return clamp_day(d.year, d.month, rec.day_of_month)
+
+
 def reanchor(rec: RecurringPurchase, real_date: date) -> RecurringPurchase:
-    """R12.3: the real purchase date becomes the new anchor."""
-    return rec.model_copy(update={"last_date": real_date, "next_date": None})
+    """R12.3: the real purchase date becomes the new anchor.
+
+    R14.30: with ``day_of_month`` the anchor is the planned day X nearest to the real date, so
+    a purchase a few days early or late does not move the following ones off day X.
+    """
+    anchor = real_date
+    if rec.day_of_month is not None:
+        month = month_of(real_date)
+        candidates = [_on_day(rec, date(*parse_month(add_months(month, k)), 1)) for k in (-1, 0, 1)]
+        anchor = min(candidates, key=lambda d: (abs((d - real_date).days), d))
+    return rec.model_copy(update={"last_date": anchor, "next_date": None})
 
 
 def postpone(rec: RecurringPurchase, new_date: date) -> RecurringPurchase:

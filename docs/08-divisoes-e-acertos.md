@@ -137,6 +137,16 @@ Uma lista única, igual para todo o sistema:
 | 4 | Donos próprios do cartão (`card.owners != null`, inclusive adicional) | `owners:card` |
 | 5 | Donos herdados (principal/conta) ou da conta do extrato | `owners:account` |
 
+**"Padrão"** (R14.16, relato do operador "ninguém recebe o valor") vale os níveis 3–5: a regra que casa
+(passada 2, com a categoria do item) e, sem regra, os donos.
+- **Lançamento manual**: resolvido **ao salvar** e gravado (`allocation_origin = rule:<id>` ou `owners:*`),
+  como uma linha importada; uma regra criada depois não muda meses já acertados. Escolher "Padrão" de novo
+  na edição resolve outra vez com as regras de hoje. Lançamentos antigos salvos sem divisão são gravados
+  assim uma vez ao iniciar a app (com backup `padrao-freeze` em `data/.backups/`).
+- **Previsões** (assinatura, gasto recorrente, parcelamento) sem divisão: resolvidas na leitura, com as
+  regras de hoje; quando a fatura/extrato chega, a linha real é que fica gravada.
+- Uma divisão escolhida no item sempre vence a regra.
+
 O nível 5 sempre existe (invariante 5), então todo lançamento tem divisão. Categoria segue
 1 (anotação) > 2 (plano/assinatura/recorrente) > 3 (regra, passada 1) > última categoria usada com a
 mesma descrição (sugestão) > vazio. Vazio não é confirmável: a categoria é obrigatória (R1.11).

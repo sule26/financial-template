@@ -34,6 +34,7 @@ import {
   paymentBody,
   type PaymentDraft,
 } from "../Catalog/shared";
+import { BenefitPicker, useBenefitNames } from "../../components/BenefitPicker";
 import { CategorySelect } from "../../components/CategorySelect";
 import { QueryState, errorText } from "../../components/QueryState";
 import {
@@ -93,6 +94,8 @@ export function EntriesTab() {
   const accounts = useList("accounts");
   const ownerLabel = useOwnerLabels();
   const names = useNames();
+  // R14.32: "Caju · Home office" in the list
+  const benefitNames = useBenefitNames();
   const qs = transactionsQuery(month, uncategorized, filters);
   const list = useGet<Transaction[]>(
     ["transactions", qs],
@@ -294,6 +297,10 @@ export function EntriesTab() {
                   </Table.Td>
                   <Table.Td>
                     {METHOD_LABELS[tx.payment_method] ?? tx.payment_method}
+                    {/* R14.32: which benefit of the card paid it */}
+                    {tx.benefit_id && (
+                      <> · {benefitNames[tx.benefit_id] ?? tx.benefit_id}</>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     {names.owner(tx.card_id ?? tx.account_id)}
@@ -357,6 +364,7 @@ export function EditTransactionForm({
     payment_method: tx.payment_method,
     card_id: tx.card_id,
     account_id: tx.account_id,
+    benefit_id: tx.benefit_id ?? null, // R14.32
   });
   const defaultHint = useDefaultSplit(payment.card_id, payment.account_id);
   const [categoryId, setCategoryId] = useState<string | null>(tx.category_id);
@@ -391,7 +399,8 @@ export function EditTransactionForm({
       if (
         payment.payment_method !== tx.payment_method ||
         payment.card_id !== tx.card_id ||
-        payment.account_id !== tx.account_id
+        payment.account_id !== tx.account_id ||
+        (payment.benefit_id ?? null) !== (tx.benefit_id ?? null)
       )
         Object.assign(body, paymentBody(payment));
       const amount = parseMoneyInput(amountText);
@@ -402,6 +411,8 @@ export function EditTransactionForm({
         amount,
         purchase_date: date,
       });
+    } else if ((payment.benefit_id ?? null) !== (tx.benefit_id ?? null)) {
+      body.benefit_id = payment.benefit_id ?? null;
     }
     setError(null);
     save.mutate(body, { onSuccess: onDone });
@@ -430,10 +441,22 @@ export function EditTransactionForm({
             <DateField label="Data" value={date} onChange={setDate} />
           </>
         ) : (
-          <Text size="sm">
-            {formatDate(tx.purchase_date)} · {tx.description} ·{" "}
-            {formatMoney(tx.amount)}
-          </Text>
+          <>
+            <Text size="sm">
+              {formatDate(tx.purchase_date)} · {tx.description} ·{" "}
+              {formatMoney(tx.amount)}
+            </Text>
+            {/* R14.32: on an imported line, which benefit paid it is mine to say */}
+            {tx.payment_method === "benefit" && (
+              <BenefitPicker
+                accountId={tx.account_id}
+                value={payment.benefit_id ?? null}
+                onChange={(benefit_id) =>
+                  setPayment((p) => ({ ...p, benefit_id }))
+                }
+              />
+            )}
+          </>
         )}
         <Select
           label="Tipo"

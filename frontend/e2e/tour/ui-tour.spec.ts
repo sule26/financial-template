@@ -123,6 +123,15 @@ async function seed(api: APIRequestContext) {
     account_id: "acc_vr",
     amount_history: [{ from_month: month(-12), amount: "900.00" }],
   });
+  // R14.32: one benefit card with two benefits
+  await post("/api/benefits", {
+    id: "ben_ho",
+    name: "Home office",
+    user_id: "eu",
+    destination: "card",
+    account_id: "acc_vr",
+    amount_history: [{ from_month: month(-12), amount: "150.00" }],
+  });
   await post("/api/subscriptions", {
     id: "sub_stream",
     description: "STREAMING",
@@ -228,6 +237,7 @@ async function seed(api: APIRequestContext) {
     category_id: cat("Alimentação"),
     payment_method: "benefit",
     account_id: "acc_vr",
+    benefit_id: "ben_vr",
   });
   await post("/api/transactions", {
     purchase_date: day(-1),
@@ -384,13 +394,17 @@ test("r14_7 visual tour of every screen", async ({ page, request }) => {
     for (const [path, name] of [
       ["/revisao", "revisao"],
       ["/cadastros?tab=cartoes", "cadastros-cartoes"],
+      ["/", "resumo"],
       ["/lancamentos", "lancamentos"],
       ["/projecao", "projecao"],
     ] as const) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await page.waitForTimeout(500);
-      await page.screenshot({ path: join(SHOTS, `w${w}-${name}.png`) });
+      await page.screenshot({
+        path: join(SHOTS, `w${w}-${name}.png`),
+        fullPage: true,
+      });
     }
   }
 

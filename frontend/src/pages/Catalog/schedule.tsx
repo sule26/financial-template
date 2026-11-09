@@ -123,9 +123,15 @@ export function describePrice(
   const upcoming = sorted.filter((e) => e.from_month > month);
   const next = upcoming[0];
   if (latest && next) {
+    // the nearer change, plus how many others are scheduled in between
+    const between = upcoming.length - 2;
     const then =
       upcoming.length > 1
-        ? `; ${formatMoney(next.amount)} em ${formatMonth(next.from_month)}`
+        ? `; ${formatMoney(next.amount)} em ${formatMonth(next.from_month)}${
+            between > 0
+              ? ` e mais ${between} reajuste${between > 1 ? "s" : ""}`
+              : ""
+          }`
         : "";
     return `${formatMoney(latest.amount)} a partir de ${formatMonth(latest.from_month)} (hoje ${formatMoney(now)}${then})`;
   }
@@ -347,33 +353,31 @@ export function step(
   return date.toISOString().slice(0, 10);
 }
 
-/**
- * Next expected date: explicit ``next_date`` (after postpone) or ``last_date + every``.
- * R14.26: a conta da casa never moves its anchor, so with ``month`` it is the first due date
- * from that month on (not skipped).
- */
-export function nextDate(rec: RecurringPurchase, month?: string): string {
-  if (rec.next_date) return rec.next_date;
-  if (rec.group !== "household" || !month)
-    return step(rec.last_date, 1, rec.every);
-  for (let k = 1; k < 2000; k++) {
-    const date = step(rec.last_date, k, rec.every);
-    if (date.slice(0, 7) >= month && !rec.skipped_dates.includes(date))
-      return date;
-  }
-  return step(rec.last_date, 1, rec.every);
+/** R14.30: ``date`` moved to day ``day`` of its month (last day in shorter months). */
+export function onDay(date: string, day: number | null | undefined): string {
+  if (!day) return date;
+  const [y, m] = date.split("-").map(Number) as [number, number];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${date.slice(0, 8)}${String(Math.min(day, last)).padStart(2, "0")}`;
 }
 
 /**
- * R14.30: anchor for "todo dia X": day X in the month of ``date``, or in the latest earlier month
- * that has day X (31 on 30/09 → 31/08), so later months keep day X (30/09, 31/10…).
+ * Next expected date (R12.2): explicit ``next_date`` (after postpone), else the first
+ * ``last_date + k × every`` (on day X with "todo dia X", R14.30) not skipped nor paused.
+ * R14.26: a conta da casa never moves its anchor, so with ``month`` it is the first due date
+ * from that month on.
  */
-export function withDay(date: string, day: number): string {
-  let [y, m] = date.split("-").map(Number) as [number, number];
-  for (let i = 0; i < 12; i++) {
-    if (new Date(Date.UTC(y, m, 0)).getUTCDate() >= day) break;
-    m -= 1;
-    if (m === 0) [y, m] = [y - 1, 12];
+export function nextDate(rec: RecurringPurchase, month?: string): string {
+  if (rec.next_date) return rec.next_date;
+  const at = (k: number) =>
+    onDay(step(rec.last_date, k, rec.every), rec.day_of_month);
+  for (let k = 1; k < 2000; k++) {
+    const date = at(k);
+    if (rec.group === "household" && month && date.slice(0, 7) < month)
+      continue;
+    if (rec.skipped_dates.includes(date)) continue;
+    if (pausedIn(rec.pauses, date.slice(0, 7))) continue;
+    return date;
   }
-  return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return at(1);
 }
