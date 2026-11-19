@@ -175,3 +175,5 @@ Verificação: testes escritos pelo mesmo agente que implementou (ambiente sem s
   Notas: resolvido na leitura (`Ledger.default_allocation`), então vale para lançamentos manuais, assinaturas e gastos recorrentes, e para regras criadas depois; divisão explícita vence. Testes `test_r14_16_*`.
 - [x] T7.24 Renomear `.yml` → `.yaml` (Taskfile.yaml, compose.yaml, .github/workflows/ci.yaml) e documentar a convenção em docs/12 (R14.35)
   Notas: perfis de banco em `.yml` não são mais lidos (erro "renomeie para .yaml" em Status). Testes `test_r14_35_*`.
+- [x] T7.28 Extrato CSV do Inter: `sign` em perfis CSV, descrição de várias colunas, perfil de exemplo (R14.38)
+  Notas: antes o leitor de CSV ignorava `sign`, então débito `-` de extrato virava `income`; o padrão `auto` não muda (fatura e perfis antigos). `columns.desc` aceita lista, juntada com " - ". Detecção de CSV também tenta o cabeçalho lido com o `skip_rows`/separador do perfil (achado: o preâmbulo "Conta ;…" do Inter era tomado como cabeçalho). Saque classificado como `transfer` (`payment_method: cash`) — a confirmar com o operador. Testes `test_r14_38_*`.

@@ -9,7 +9,12 @@ import pytest
 import yaml
 
 from expense_tracker.importing import ParseError, parse_csv
-from expense_tracker.importing.parser import csv_header, read_csv_rows
+from expense_tracker.importing.parser import (
+    csv_header,
+    detect_csv,
+    profile_csv_header,
+    read_csv_rows,
+)
 from expense_tracker.profiles import Profile, parse_profile
 from fixtures.files import OPEN_INVOICE_CSV_PROFILE, open_invoice_csv
 
@@ -198,3 +203,92 @@ def test_csv_header_detection_helper() -> None:
     assert csv_header("Data\tLançamento\n".encode("latin-1")) == ["Data", "Lançamento"]
     assert csv_header(b"so uma coluna\n") == []
     assert csv_header(b"\xff\xfe", encoding_candidates=("utf-8",)) == []
+
+
+# docs/06#fatura-aberta-e-formatos-tabulares-csv--r410-r411 — statement CSV with signed debits
+STATEMENT_CSV = (
+    " Extrato Conta Corrente \n"
+    "Conta ;123\n"
+    "Período ;18/10/2026 a 18/11/2026\n"
+    "Saldo ;124,70\n"
+    "\n"
+    "Data Lançamento;Histórico;Descrição;Valor;Saldo\n"
+    "17/11/2026;Pix enviado ;Mercado X;-338,90;124,70\n"
+    "16/11/2026;Pix recebido;Fulano;150,00;463,60\n"
+    "15/11/2026;Aplicação;;-50,00;313,60\n"
+).encode()
+
+
+def statement_profile(**csv_overrides: object) -> Profile:
+    data = {
+        "id": "banco-z-extrato-csv",
+        "kind": "extrato",
+        "format": "csv",
+        "csv": {
+            "delimiter": ";",
+            "skip_rows": 5,
+            "columns": {
+                "date": "Data Lançamento",
+                "desc": ["Histórico", "Descrição"],
+                "amount": "Valor",
+            },
+            **csv_overrides,
+        },
+        "detect": {"columns": ["Data Lançamento", "Histórico", "Descrição", "Valor", "Saldo"]},
+        "transactions": {"sign": "minus_is_debit"},
+        "classify": [{"match": "^Aplicação", "kind": "transfer", "tag": "investment_contribution"}],
+    }
+    return parse_profile(yaml.safe_dump(data, allow_unicode=True))
+
+
+def test_r14_38_csv_respects_minus_is_debit() -> None:
+    result = parse_csv(statement_profile(), STATEMENT_CSV, "extrato.csv")
+    assert [ln.amount for ln in result.lines] == [
+        Decimal("338.90"),
+        Decimal("-150.00"),
+        Decimal("50.00"),
+    ]
+    assert [ln.kind for ln in result.lines] == ["expense", "income", "transfer"]
+    assert result.lines[2].tag == "investment_contribution"
+    assert (result.period_from, result.period_to) == (date(2026, 11, 15), date(2026, 11, 17))
+
+
+def test_r14_38_csv_desc_joins_several_columns() -> None:
+    result = parse_csv(statement_profile(), STATEMENT_CSV, "extrato.csv")
+    # empty cells are skipped; whitespace is collapsed
+    assert [ln.description for ln in result.lines] == [
+        "Pix enviado - Mercado X",
+        "Pix recebido - Fulano",
+        "Aplicação",
+    ]
+
+
+def test_r14_38_csv_desc_list_needs_every_column() -> None:
+    p = statement_profile(
+        columns={"date": "Data Lançamento", "desc": ["Histórico", "Nope"], "amount": "Valor"}
+    )
+    with pytest.raises(ParseError, match="Nope"):
+        parse_csv(p, STATEMENT_CSV, "extrato.csv")
+
+
+def test_r14_38_csv_default_sign_is_unchanged() -> None:
+    # "auto": a minus still marks a credit, as before (invoices, older statement profiles)
+    result = parse_csv(profile(), open_invoice_csv(ROWS), "fatura-2026-10.csv", as_of=AS_OF)
+    assert [ln.amount for ln in result.lines][-1] == Decimal("-10.00")
+
+
+def test_r14_38_csv_desc_list_cannot_be_empty() -> None:
+    with pytest.raises(ValueError, match="desc"):
+        statement_profile(columns={"date": "Data Lançamento", "desc": [], "amount": "Valor"})
+
+
+def test_r14_38_detection_uses_profile_skip_rows() -> None:
+    p = statement_profile()
+    # the generic helper stops at the two-cell preamble row ("Conta ;123")
+    assert not detect_csv(p, csv_header(STATEMENT_CSV))
+    assert detect_csv(p, profile_csv_header(STATEMENT_CSV, p))
+
+
+def test_r14_38_profile_header_of_undecodable_file_is_empty() -> None:
+    p = statement_profile(encoding="utf-8")
+    assert profile_csv_header(b"\xff\xfe\xfa", p) == []

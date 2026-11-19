@@ -1,0 +1,29 @@
+# Example bank profile: Banco Inter checking account statement (CSV export).
+# Layout observed on a real export (2026-11). Values below are patterns only — no personal data.
+# The file starts with 5 lines of account info (title, account, period, balance, blank).
+id: inter-extrato-csv
+name: Banco Inter — extrato da conta (CSV)
+kind: extrato
+format: csv
+csv:
+  encoding: utf-8
+  delimiter: ';'
+  skip_rows: 5
+  columns:
+    date: 'Data Lançamento'
+    desc: ['Histórico', 'Descrição']   # "Pix enviado - Loja X"
+    amount: 'Valor'
+detect:
+  columns: ['Data Lançamento', 'Histórico', 'Descrição', 'Valor', 'Saldo']
+date_format: '%d/%m/%Y'
+amount_format: br
+transactions:
+  sign: minus_is_debit             # Inter prints debits with "-"; unsigned = money in
+
+classify:
+  - {match: '^Pagamento efetuado - Pagamento Fatura', kind: transfer, tag: invoice_payment}
+  - {match: '^Aplicação', kind: transfer, tag: investment_contribution}
+  - {match: '^Resgate', kind: transfer, tag: investment_withdrawal}
+  - {match: '^SAQUE', kind: transfer, payment_method: cash}   # cash spending is logged by hand
+  - {match: '^Pagamento de Título', payment_method: boleto}
+  - {match: '^Pix (enviado|recebido)', payment_method: pix}
