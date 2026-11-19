@@ -118,12 +118,23 @@ class ClassifyRule(Strict):
 
 class CsvColumns(Strict):
     date: str
-    desc: str
+    desc: str | list[str]  # several columns are joined with " - " (empty cells skipped)
     amount: str
     installment: str | None = None
     card_hint: str | None = None
     kind: str | None = None
     due_date: str | None = None
+
+    @field_validator("desc")
+    @classmethod
+    def _desc_not_empty(cls, v: str | list[str]) -> str | list[str]:
+        if isinstance(v, list) and not v:
+            raise ValueError("desc needs at least one column")
+        return v
+
+    @property
+    def desc_columns(self) -> list[str]:
+        return [self.desc] if isinstance(self.desc, str) else list(self.desc)
 
 
 class CsvSpec(Strict):

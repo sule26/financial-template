@@ -294,6 +294,19 @@ def read_csv_rows(data: bytes, profile: Profile) -> tuple[list[str], list[list[s
     return [], rows
 
 
+def profile_csv_header(data: bytes, profile: Profile) -> list[str]:
+    """Header row read with the profile's own CSV settings (skip_rows, delimiter, encoding).
+
+    Exports with a preamble (account, period, balance) have a two-cell row before the real
+    header, which the generic ``csv_header`` would take as the header (R14.38).
+    """
+    try:
+        header, _ = read_csv_rows(data, profile)
+    except ParseError:
+        return []
+    return header
+
+
 def csv_header(
     data: bytes, encoding_candidates: tuple[str, ...] = ("utf-8-sig", "latin-1")
 ) -> list[str]:
@@ -322,7 +335,7 @@ def parse_csv(
     if not header:
         raise ParseError("CSV header row not found")
     index = {name: i for i, name in enumerate(header)}
-    for needed in (cols.date, cols.desc, cols.amount):
+    for needed in (cols.date, *cols.desc_columns, cols.amount):
         if needed not in index:
             raise ParseError(f"CSV column {needed!r} not found")
     result = ParseResult(
@@ -345,13 +358,15 @@ def parse_csv(
                 return ""
             return row[index[name]].strip()
 
-        desc = re.sub(r"\s+", " ", cell(cols.desc))
+        parts = (re.sub(r"\s+", " ", cell(c)).strip() for c in cols.desc_columns)
+        desc = " - ".join(p for p in parts if p)
         raw = profile.csv.delimiter.join(row)
         if any(i.search(desc) for i in ignore):
             result.ignored.append(raw)
             continue
         try:
             amount = _amount(cell(cols.amount), tx.amount_format)
+            amount = _signed(abs(amount), "-" if amount < 0 else "", tx.sign)
             when = _line_date(cell(cols.date), tx.date_format, tx.month_names, reference, raw)
         except ParseError:
             result.unrecognized.append(raw)

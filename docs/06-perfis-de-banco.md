@@ -152,7 +152,7 @@ csv:
   header_row: true
   columns:                       # nome da coluna no arquivo → campo
     date: 'Data'
-    desc: 'Lançamento'
+    desc: 'Lançamento'           # ou lista: ['Histórico', 'Descrição'] → "Pix enviado - Loja X"
     amount: 'Valor'
     installment: 'Parcela'       # opcional ("3/10" ou "3 de 10")
     card_hint: 'Final do Cartão' # opcional, por linha (adicionais)
@@ -165,7 +165,15 @@ ignore: ['PAGAMENTO']
 invoice_month_from: due_date_column | filename | ask   # como descobrir o mês de fatura
 ```
 
-- Detecção para CSV: pelas colunas do cabeçalho (`detect.columns`), em vez de texto.
+- Detecção para CSV: pelas colunas do cabeçalho (`detect.columns`), em vez de texto. O cabeçalho é
+  a primeira linha com mais de uma célula **ou** a linha lida com o `skip_rows`, `delimiter` e
+  `encoding` do próprio perfil (exportações com preâmbulo, como o extrato do Inter).
+- `columns.desc` pode ser uma **lista de colunas**: os valores são juntados com ` - `, pulando
+  células vazias (ex.: extrato do Inter, em que o tipo — "Pix enviado", "Aplicação" — fica numa coluna
+  e o favorecido em outra). `classify` e `ignore` olham a descrição juntada (R14.38).
+- `transactions.sign` vale também para CSV, com a mesma tabela do PDF: o sinal impresso na coluna de
+  valor é interpretado pelo modo. Extrato que imprime débito com `-` usa `minus_is_debit`; sem `sign`
+  (`auto`), `-` continua marcando crédito (R14.38).
 - O pipeline depois do parse é o mesmo do PDF (`ParseResult`), então reconciliação, fingerprint e
   Revisão não mudam. `ignore`, `classify` e `installment` funcionam igual.
 - Mês de fatura de um CSV aberto: `invoice_month_from` — coluna de vencimento, padrão no nome do
@@ -194,6 +202,11 @@ invoice_month_from: due_date_column | filename | ask   # como descobrir o mês d
   para transferir confirmação e edições entre versões.
 
 ## Perfis de exemplo validados (Inter e Nubank)
+
+`profiles/examples/inter-extrato-csv.yaml` lê o extrato da conta corrente do Inter exportado em CSV
+(nov/2026): 75 linhas, zero não reconhecidas, e os sinais conferidos contra a coluna Saldo. Classifica
+pagamento de fatura (`tag: invoice_payment`), aplicação/resgate do CDB, saque (transferência para
+dinheiro), boleto e PIX.
 
 `profiles/examples/inter-fatura.yaml` e `nubank-fatura.yaml` foram escritos a partir de faturas reais
 (out/2026) e validados contra o texto extraído: **zero linhas não reconhecidas** e soma = total

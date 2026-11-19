@@ -1,4 +1,4 @@
-"""Example profiles (Inter, Nubank) against synthetic PDFs imitating their layouts (docs/06)."""
+"""Example profiles (Inter, Nubank, Inter statement CSV) against synthetic files (docs/06)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "profiles" / "examples"
 def examples() -> ProfileSet:
     loaded = load_profiles(EXAMPLES)
     assert loaded.errors == {}
-    assert set(loaded.profiles) == {"inter-fatura", "nubank-fatura"}
+    assert set(loaded.profiles) == {"inter-fatura", "nubank-fatura", "inter-extrato-csv"}
     return loaded
 
 
@@ -170,3 +170,42 @@ def test_r4_9_nubank_amount_due_zero_with_purchases(tmp_path: Path, examples) ->
     assert outcome.result.amount_due == Decimal("0.00")
     assert outcome.result.total == Decimal("350.00")
     assert len(outcome.result.lines) == 2
+
+
+# docs/06#perfis-de-exemplo-validados-inter-e-nubank — Inter checking account CSV export
+INTER_STATEMENT_CSV = (
+    " Extrato Conta Corrente \n"
+    "Conta ;000\n"
+    "Período ;18/10/2026 a 18/11/2026\n"
+    "Saldo ;100,00\n"
+    "\n"
+    "Data Lançamento;Histórico;Descrição;Valor;Saldo\n"
+    "17/11/2026;Pix enviado ;Mercado X;-38,90;100,00\n"
+    "16/11/2026;Pix recebido;Fulano;150,00;138,90\n"
+    "15/11/2026;Pagamento efetuado;Pagamento Fatura - NOME;-1.355,92;-11,10\n"
+    "14/11/2026;Aplicação;Cdb Porquinho;-5.000,00;1344,82\n"
+    "13/11/2026;Resgate;Cdb Porquinho;798,37;6344,82\n"
+    "12/11/2026;SAQUE BANCO 24H;SAQUE BANCO 24H;-360,00;5546,45\n"
+    "11/11/2026;Pagamento de Título;PLANO DE SAUDE;-582,06;5906,45\n"
+).encode()
+
+
+def test_r14_38_inter_statement_csv_example(tmp_path: Path, examples: ProfileSet) -> None:
+    path = write(tmp_path / "extrato.csv", INTER_STATEMENT_CSV)
+    outcome = parse_file_inline(path, "extrato", examples, [])
+    assert outcome.status == "ok", outcome.error
+    assert outcome.profile_id == "inter-extrato-csv"
+    result = outcome.result
+    assert result is not None
+    assert result.unrecognized == []
+    assert [(ln.amount, ln.kind, ln.tag, ln.payment_method) for ln in result.lines] == [
+        (Decimal("38.90"), "expense", None, "pix"),
+        (Decimal("-150.00"), "income", None, "pix"),
+        (Decimal("1355.92"), "transfer", "invoice_payment", None),
+        (Decimal("5000.00"), "transfer", "investment_contribution", None),
+        (Decimal("-798.37"), "transfer", "investment_withdrawal", None),
+        (Decimal("360.00"), "transfer", None, "cash"),
+        (Decimal("582.06"), "expense", None, "boleto"),
+    ]
+    assert result.lines[0].description == "Pix enviado - Mercado X"
+    assert (result.period_from, result.period_to) == (date(2026, 11, 11), date(2026, 11, 17))

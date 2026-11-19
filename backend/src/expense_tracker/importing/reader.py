@@ -19,6 +19,7 @@ from expense_tracker.importing.parser import (
     detect_pdf,
     parse_csv,
     parse_text,
+    profile_csv_header,
 )
 from expense_tracker.importing.result import ParseResult
 from expense_tracker.profiles.loader import ProfileSet
@@ -87,7 +88,11 @@ def _parse(
         data = path.read_bytes()
         header = csv_header(data)
         candidates = [
-            p for p in profiles.profiles.values() if p.kind == kind and detect_csv(p, header)
+            p
+            for p in profiles.profiles.values()
+            if p.kind == kind
+            and p.format == "csv"
+            and (detect_csv(p, header) or detect_csv(p, profile_csv_header(data, p)))
         ]
         if forced_profile:
             candidates = [p for p in profiles.profiles.values() if p.id == forced_profile]
